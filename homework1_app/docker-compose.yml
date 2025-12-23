@@ -1,0 +1,77 @@
+# Author: Prof. MM Ghassemi <ghassem3@msu.edu>
+
+version: "3.8"
+
+services:
+  # PostgreSQL database service
+  postgres:
+    container_name: ${POSTGRES_CONTAINER}
+    image: postgres:${POSTGRES_VERSION}
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${DATABASE_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Database initialization service
+  db-init:
+    image: postgres:${POSTGRES_VERSION}
+    container_name: ${DB_INIT_CONTAINER}
+    env_file:
+      - .env
+    volumes:
+      - ./init-db.sh:/init-db.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["/bin/bash", "/init-db.sh"]
+    restart: "no"
+
+  # Flask application service
+  flask-app:
+    container_name: ${FLASK_CONTAINER}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "${FLASK_PORT}:8080"
+    volumes:
+      - .:/app
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment:
+      - DATABASE_HOST=${DATABASE_HOST}
+      - DATABASE_USER=${DATABASE_USER}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
+      - DATABASE_NAME=${DATABASE_NAME}
+      - DATABASE_PORT=${DATABASE_PORT}
+      - SECRET_KEY=${SECRET_KEY}
+      - FLASK_ENV=${FLASK_ENV}
+      - FLASK_DEBUG=${FLASK_DEBUG}
+      - FLASK_PORT=${FLASK_PORT}
+      - FLASK_HOST=${FLASK_HOST}
+      - SEND_FILE_MAX_AGE_DEFAULT=${SEND_FILE_MAX_AGE_DEFAULT}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL}
+      - GEMINI_MAX_TOKENS=${GEMINI_MAX_TOKENS}
+      - GEMINI_TEMPERATURE=${GEMINI_TEMPERATURE}
+      - GEMINI_MAX_CONVERSATION_HISTORY=${GEMINI_MAX_CONVERSATION_HISTORY}
+    stdin_open: true
+    tty: true
+
+volumes:
+  postgres_data:

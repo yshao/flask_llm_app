@@ -1,0 +1,11 @@
+flask
+gunicorn
+cryptography
+flask-socketio
+eventlet==0.30.2
+google-generativeai
+psycopg2-binary
+requests
+python-dotenv
+beautifulsoup4
+Flask-Failsafe
