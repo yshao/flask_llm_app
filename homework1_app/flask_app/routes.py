@@ -5,7 +5,10 @@ from flask import render_template, redirect, request, session, url_for, jsonify,
 from .utils.database import database
 from .utils.llm import GeminiClient
 from .utils.llm import handle_ai_chat_request
+from .utils.llm import handle_ai_chat_request_react
 from .utils.llm import execute_orchestrator_response
+from .utils.llm import USE_REACT
+from .utils.llm import assess_message_risk
 from .utils.a2a_protocol import A2AProtocol, A2AMessage
 from .utils.evaluation_agent import EvaluationAgent
 from bs4 import BeautifulSoup
@@ -49,14 +52,61 @@ def chat_with_ai():
     data          = request.get_json()
     message       = data.get('message', '').strip()
     page_content  = data.get('pageContent', {})
-    
+
     # Log the received data for debugging
     print(f"Received message: {message}")
     print(f"Received page content: {page_content}")
-    
+
+    # Check for pending confirmation first
+    if 'pending_action' in session:
+        if message.lower() in ['yes', 'y', 'ok', 'sure']:
+            # User confirmed - execute pending action
+            pending = session.pop('pending_action')
+            print(f"User confirmed action: {pending['message']}")
+
+            # Execute the pending action
+            if USE_REACT:
+                return jsonify(handle_ai_chat_request_react(GeminiClient(), pending['message'], 'main', page_content))
+            else:
+                return process_orchestrator_request(pending['message'], page_content)
+
+        elif message.lower() in ['no', 'n', 'cancel']:
+            # User declined - cancel action
+            session.pop('pending_action')
+            return jsonify({"response": "Action cancelled."})
+
+        else:
+            # Invalid response
+            return jsonify({"response": "Please respond with 'yes' to proceed or 'no' to cancel."})
+
+    # Assess risk for new messages
+    risk = assess_message_risk(message)
+    if risk['risk_level'] == 'high':
+        # Store and ask for confirmation
+        session['pending_action'] = {'message': message}
+        return jsonify({
+            "response": f"Warning: {risk['explanation']}\n\nDo you want to proceed? (yes/no)",
+            "requires_confirmation": True
+        })
+
+    # Normal processing
+    return process_orchestrator_request(message, page_content)
+
+
+def process_orchestrator_request(message, page_content):
+    """
+    Process the request through the orchestrator.
+
+    Args:
+        message: User message
+        page_content: Current page context
+
+    Returns:
+        JSON response
+    """
     # Create LLM client and pass it to the handler
     gemini = GeminiClient()
-    
+
     # Create a dynamic system prompt that leverages page content when relevant
     if page_content and page_content.get('content'):
         
@@ -85,23 +135,30 @@ def chat_with_ai():
         system_prompt = "You are a helpful AI assistant."
         print("Using fallback system prompt (no page content available)")
 
-    # Use orchestrator by default for multi-expert coordination (don't emit raw plan to socket)
-    orchestrator_response = handle_ai_chat_request(llm_client=gemini, message=message, system_prompt=system_prompt, room='main', page_content=page_content, role="Orchestrator", emit_to_socket=False)
-
-    # Get the orchestrator's response
-    response_data = orchestrator_response.get_json() if hasattr(orchestrator_response, 'get_json') else orchestrator_response
-
-    if response_data.get('success'):
-        orchestrator_plan = response_data.get('response', '')
-        print(f"Orchestrator plan: {orchestrator_plan}")
-
-        # Execute the orchestrator's plan (this will emit the final synthesized response)
-        execution_result = execute_orchestrator_response(orchestrator_plan, message, page_content)
-
-        return jsonify(execution_result)
+    # Use ReAct orchestrator if enabled, otherwise use original orchestrator
+    if USE_REACT:
+        print("Using ReAct orchestrator")
+        result = handle_ai_chat_request_react(gemini, message, 'main', page_content)
+        return jsonify(result)
     else:
-        # If orchestrator failed, return the error
-        return orchestrator_response
+        print("Using original orchestrator")
+        # Use orchestrator by default for multi-expert coordination (don't emit raw plan to socket)
+        orchestrator_response = handle_ai_chat_request(llm_client=gemini, message=message, system_prompt=system_prompt, room='main', page_content=page_content, role="Orchestrator", emit_to_socket=False)
+
+        # Get the orchestrator's response
+        response_data = orchestrator_response.get_json() if hasattr(orchestrator_response, 'get_json') else orchestrator_response
+
+        if response_data.get('success'):
+            orchestrator_plan = response_data.get('response', '')
+            print(f"Orchestrator plan: {orchestrator_plan}")
+
+            # Execute the orchestrator's plan (this will emit the final synthesized response)
+            execution_result = execute_orchestrator_response(orchestrator_plan, message, page_content)
+
+            return jsonify(execution_result)
+        else:
+            # If orchestrator failed, return the error
+            return orchestrator_response
 
 #--------------------------------------------------
 # AUTHENTICATION ROUTES

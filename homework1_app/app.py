@@ -1,7 +1,11 @@
 # Author: Prof. MM Ghassemi <ghassem3@msu.edu>
 
 import os
+from dotenv import load_dotenv
 from flask_app import create_app, socketio
+
+# Load environment variables from .env file
+load_dotenv()
 
 #--------------------------------------------------
 # APPLICATION ENTRY POINT

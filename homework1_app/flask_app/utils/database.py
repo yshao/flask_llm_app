@@ -13,6 +13,12 @@ import cryptography
 from cryptography.fernet import Fernet
 from math import pow
 from flask import current_app
+try:
+    from .embeddings import generate_embedding
+    EMBEDDING_AVAILABLE = True
+except ImportError:
+    EMBEDDING_AVAILABLE = False
+
 class database:
     """
     Database management class for PostgreSQL operations.
@@ -210,7 +216,72 @@ class database:
                 print(f"* Error importing data for {table}: {e}")
 
     def insertRows(self, table='table', columns=['x','y'], parameters=[['v11','v12'],['v21','v22']]):
-        
+
+        # Generate embeddings for supported tables before inserting
+        if EMBEDDING_AVAILABLE:
+            embedding_columns = []
+            embedding_values = {}
+
+            if table == 'institutions':
+                # Combine name + department for embedding
+                if 'name' in columns:
+                    name_idx = columns.index('name')
+                    dept_idx = columns.index('department') if 'department' in columns else -1
+                    for i, row in enumerate(parameters):
+                        text = f"{row[name_idx]} {row[dept_idx] if dept_idx >= 0 else ''}"
+                        embedding_values[i] = generate_embedding(text.strip())
+                    embedding_columns = ['embedding']
+
+            elif table == 'experiences':
+                # Combine name + description for embedding
+                if 'name' in columns:
+                    name_idx = columns.index('name')
+                    desc_idx = columns.index('description') if 'description' in columns else -1
+                    for i, row in enumerate(parameters):
+                        text = f"{row[name_idx]} {row[desc_idx] if desc_idx >= 0 else ''}"
+                        embedding_values[i] = generate_embedding(text.strip())
+                    embedding_columns = ['embedding']
+
+            elif table == 'skills':
+                # Name only for embedding
+                if 'name' in columns:
+                    name_idx = columns.index('name')
+                    for i, row in enumerate(parameters):
+                        text = row[name_idx]
+                        embedding_values[i] = generate_embedding(str(text).strip())
+                    embedding_columns = ['embedding']
+
+            elif table == 'positions':
+                # Combine title + responsibilities for embedding
+                if 'title' in columns:
+                    title_idx = columns.index('title')
+                    resp_idx = columns.index('responsibilities') if 'responsibilities' in columns else -1
+                    for i, row in enumerate(parameters):
+                        text = f"{row[title_idx]} {row[resp_idx] if resp_idx >= 0 else ''}"
+                        embedding_values[i] = generate_embedding(text.strip())
+                    embedding_columns = ['embedding']
+
+            elif table == 'users':
+                # Email only for embedding
+                if 'email' in columns:
+                    email_idx = columns.index('email')
+                    for i, row in enumerate(parameters):
+                        text = row[email_idx]
+                        embedding_values[i] = generate_embedding(str(text).strip())
+                    embedding_columns = ['embedding']
+
+            # Add embedding column to columns list
+            if embedding_columns:
+                columns = columns + embedding_columns
+
+            # Add embedding values to each row
+            if embedding_values:
+                for i, row in enumerate(parameters):
+                    if i in embedding_values:
+                        row.append(embedding_values[i])
+                    else:
+                        row.append(None)  # Null embedding if not found
+
         def process_value(value, query_params):
             """Process a single value, returning placeholder and updating query_params"""
             if isinstance(value, str) and value.strip().startswith('(SELECT'):
@@ -485,6 +556,61 @@ class database:
 
         return self.query(query, (limit,))
 
+    #--------------------------------------------------
+    # SEMANTIC SEARCH FUNCTIONS
+    #--------------------------------------------------
+    def semantic_search(self, table_name: str, query_embedding: list, limit: int = 5, threshold: float = 0.3) -> list:
+        """
+        Execute semantic similarity search using pgvector.
+
+        Finds records in the specified table that are semantically similar
+        to the query embedding using cosine distance.
+
+        Args:
+            table_name: Table to search (experiences, skills, institutions, positions, users)
+            query_embedding: 768-dimensional query vector from embeddings.generate_embedding()
+            limit: Maximum results to return (default: 5)
+            threshold: Minimum similarity score (0-1, cosine similarity, default: 0.3)
+
+        Returns:
+            List of matching rows with similarity scores added.
+            Each result dict includes a 'similarity' key (0-1, higher = more similar).
+        """
+        if not query_embedding:
+            print("Warning: Empty query embedding provided")
+            return []
+
+        # Convert embedding list to PostgreSQL array format
+        embedding_str = f"'[{','.join(map(str, query_embedding))}]'"
+
+        # Build pgvector query with cosine similarity
+        # Note: <=> returns cosine distance (0 = identical, 2 = opposite)
+        # We convert to similarity: similarity = 1 - (distance / 2)
+        sql = f"""
+            SELECT *, 1 - (embedding <=> {embedding_str}) / 2 as similarity
+            FROM {table_name}
+            WHERE embedding IS NOT NULL
+            ORDER BY embedding <=> {embedding_str}
+            LIMIT %s
+        """
+
+        try:
+            results = self.query(sql, [limit])
+
+            # Filter by threshold
+            filtered_results = [r for r in results if r.get('similarity', 0) >= threshold]
+
+            print(f"[semantic_search] Table: {table_name}, Query results: {len(results)}, Filtered: {len(filtered_results)}")
+
+            return filtered_results
+
+        except Exception as e:
+            print(f"Error in semantic_search: {e}")
+            return []
+
+    #--------------------------------------------------
+    # LLM ROLE FUNCTIONS
+    #--------------------------------------------------
     def getLLMRoles(self) -> dict:
         """
         Retrieve all active LLM role configurations from database.

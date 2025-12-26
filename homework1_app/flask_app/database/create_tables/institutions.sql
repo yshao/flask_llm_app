@@ -6,5 +6,9 @@ department     varchar(100)  DEFAULT NULL,
 address        varchar(100)  DEFAULT NULL,
 city           varchar(100)  DEFAULT NULL,
 state          varchar(100)  DEFAULT NULL,
-zip            varchar(10)   DEFAULT NULL
+zip            varchar(10)   DEFAULT NULL,
+embedding      vector(768)   DEFAULT NULL
 );
+
+CREATE INDEX IF NOT EXISTS institutions_embedding_idx
+ON institutions USING ivfflat (embedding vector_cosine_ops);

@@ -12,7 +12,9 @@ import ast
 import re
 import json
 
+import sys
 # Master prompt template for role-based expert system
+USE_REACT = True
 MASTER_PROMPT_TEMPLATE = """
 You are a {{role}} with expertise in {{domain}}.
 
@@ -33,10 +35,25 @@ Request:
 LLM_ROLES = {
     "Database Read Expert": {
         "role": "Database Read Expert",
-        "domain": "PostgreSQL database queries and data analysis",
-        "specific_instructions": "Use database schema provided to answer question below. Respond with only SQL query code. Do not include explanations or markdown formatting.",
-        "few_shot_examples": "Q: How long did he work at MSU?\nA: SELECT start_date, end_date FROM positions WHERE institution_id = (SELECT inst_id FROM institutions WHERE name LIKE '%MSU%');",
-        "background_context": "Database schema with tables: users(institution_id,email,password,role), institutions(inst_id,name,type,location), positions(position_id,inst_id,title,start_date,end_date,description), experiences(exp_id,position_id,title,description,start_date,end_date), skills(skill_id,experience_id,name,type,level)"
+        "domain": "PostgreSQL database queries with pgvector semantic search",
+        "specific_instructions": """Use database schema provided to answer questions. You have TWO query methods:
+
+1. SEMANTIC SEARCH (pgvector): For abbreviations, synonyms, concept-based queries
+   - Use the <=> operator for cosine similarity
+   - Format: SELECT *, 1 - (embedding <=> '[query_vector]')/2 as similarity FROM table ORDER BY embedding <=> '[query_vector]' LIMIT 5
+   - Always try semantic search first for ambiguous terms
+
+2. EXACT MATCH: For specific IDs or exact values known
+
+IMPORTANT: Always prefer semantic_search when user uses abbreviations (e.g., "MSU") or general concepts (e.g., "AI skills").""",
+        "few_shot_examples": """Q: Find my MSU experience
+A: Thought: User asks about MSU. This is likely an abbreviation. Use semantic search to find similar institution names.
+Action: semantic_search(table="institutions", query="MSU")
+
+Q: What AI skills do I have?
+A: Thought: User asks about AI skills. Use semantic search to find semantically related skills.
+Action: semantic_search(table="skills", query="artificial intelligence machine learning")""",
+        "background_context": "Database schema with pgvector support:\n- institutions(inst_id, name, type, department, address, city, state, zip, embedding)\n- positions(position_id, inst_id, title, responsibilities, start_date, end_date, embedding)\n- experiences(experience_id, position_id, name, description, start_date, end_date, embedding)\n- skills(skill_id, experience_id, name, type, level, embedding)\n- users(user_id, email, role, embedding)\n\nAll tables have 768-dim embedding columns. Use <=> operator for cosine distance."
     },
     "Database Write Expert": {
         "role": "Database Write Expert",
@@ -245,6 +262,251 @@ def handle_ai_chat_request(llm_client: GeminiClient, message: str, system_prompt
             "success": False,
             "response": f"An error occurred: {str(e)}"
         }), 500
+
+
+def assess_message_risk(message: str) -> dict:
+    """
+    Assess if a message contains potentially dangerous operations.
+
+    Args:
+        message: User's message to assess
+
+    Returns:
+        dict with risk_level ('high', 'low') and explanation
+    """
+    dangerous_keywords = ['delete', 'remove', 'clear', 'drop', 'destroy', 'truncate']
+    message_lower = message.lower()
+
+    found_keywords = [kw for kw in dangerous_keywords if kw in message_lower]
+
+    if found_keywords:
+        return {
+            'risk_level': 'high',
+            'explanation': f"This request contains potentially dangerous operations: {', '.join(found_keywords)}. This action may modify or delete data.",
+            'keywords_found': found_keywords
+        }
+    else:
+        return {
+            'risk_level': 'low',
+            'explanation': 'This request appears safe to process.',
+            'keywords_found': []
+        }
+
+
+def handle_ai_chat_request_react(llm_client: GeminiClient, message: str,
+                                 room: str = 'main', page_content: dict = None) -> dict:
+    """
+    ReAct pattern orchestrator for multi-step reasoning with semantic search.
+
+    This implements the ReAct (Reasoning + Acting) pattern where the LLM:
+    1. Thinks about what to do
+    2. Selects an action (tool)
+    3. Observes the result
+    4. Repeats until it can provide a Final Answer
+
+    Args:
+        llm_client: Gemini LLM client
+        message: User's question
+        room: SocketIO room for emitting messages
+        page_content: Current page context (not used in current implementation)
+
+    Returns:
+        dict with success, response, and reasoning trace
+    """
+    MAX_ITERATIONS = 10
+    from .database import database
+    from .embeddings import generate_query_embedding
+
+    db = database()
+
+    # Tool execution functions
+    def execute_semantic_search(db, table, query):
+        """Execute semantic search using pgvector"""
+        try:
+            embedding = generate_query_embedding(query)
+            if not embedding:
+                return "Error: Failed to generate query embedding"
+            results = db.semantic_search(table, embedding, limit=5, threshold=0.3)
+            return json.dumps({"results": results, "count": len(results)})
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    def execute_sql_query(db, sql):
+        """Execute SQL query"""
+        try:
+            results = db.query(sql)
+            return json.dumps({"results": results, "count": len(results)})
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    # ReAct tools available to the agent
+    REACT_TOOLS = {
+        "semantic_search": {
+            "description": "Search for semantically similar records using vector embeddings. Use when user uses abbreviations, synonyms, or concepts that may have different wording in the database.",
+            "parameters": "table (str: 'institutions', 'experiences', 'skills', 'positions', 'users'), query (str: text to search for)",
+        },
+        "sql_query": {
+            "description": "Execute a SQL query on the database. Use for exact lookups when you know specific values.",
+            "parameters": "sql (str: valid SQL query)",
+        }
+    }
+
+    # Build ReAct prompt
+    def build_react_prompt(question, observations):
+        tools_desc = "\n".join([
+            f"- {name}: {tool['description']}\n  Parameters: {tool['parameters']}"
+            for name, tool in REACT_TOOLS.items()
+        ])
+
+        prompt = f"""You are a helpful AI assistant that answers questions about a resume database.
+
+Available Tools:
+{tools_desc}
+
+Database Schema:
+- institutions(inst_id, name, type, department, address, city, state, zip, embedding)
+- positions(position_id, inst_id, title, responsibilities, start_date, end_date, embedding)
+- experiences(experience_id, position_id, name, description, start_date, end_date, embedding)
+- skills(skill_id, experience_id, name, type, level, embedding)
+- users(user_id, email, role, embedding)
+
+IMPORTANT: All tables have embedding columns for semantic search. Use semantic_search for:
+- Abbreviations (e.g., "MSU" → "Michigan State University")
+- Synonyms and related terms
+- Concept-based queries (e.g., "AI skills" → "machine learning", "deep learning")
+
+Use sql_query only when you need exact matches or have specific IDs.
+
+Instructions:
+1. Start with "Thought:" to reason about what to do
+2. Use "Action:" followed by tool name and parameters
+3. Wait for "Observation:" with tool results
+4. Continue reasoning until you can answer
+5. Use "Final Answer:" when ready to respond
+
+Question: {question}
+
+"""
+        if observations:
+            prompt += "\n".join(observations) + "\n"
+
+        return prompt
+
+    # ReAct loop
+    observations = []
+    iteration = 0
+
+    while iteration < MAX_ITERATIONS:
+        # Build prompt with current context
+        prompt = build_react_prompt(message, observations)
+
+        # Get LLM response
+        result = llm_client.send_message(prompt, conversation_history=[])
+
+        if not result.get("success"):
+            return {
+                "success": False,
+                "response": f"LLM error: {result.get('error', 'Unknown error')}"
+            }
+
+        response_text = result["response"].strip()
+        print(f"\n[ReAct Iteration {iteration + 1}]")
+        print(f"LLM Response:\n{response_text}\n")
+
+        # Check for Final Answer
+        if "Final Answer:" in response_text or "FINAL ANSWER:" in response_text:
+            final_answer = re.split(r'Final Answer:|FINAL ANSWER:', response_text, maxsplit=1)[-1].strip()
+            # Emit to socket
+            process_and_emit_message(socketio, final_answer, 'ai', room)
+
+            return {
+                "success": True,
+                "response": final_answer,
+                "iterations": iteration + 1
+            }
+
+        # Parse Action
+        action_match = re.search(r'Action:\s*(\w+)', response_text, re.IGNORECASE)
+        if not action_match:
+            observations.append(f"Observation: No valid action found. Please specify an Action.")
+            iteration += 1
+            continue
+
+        action_name = action_match.group(1).lower()
+
+        # Extract action input - try multiple patterns
+        action_input = ""
+        input_patterns = [
+            r'Action Input:\s*(.+?)(?:\nThought:|\nAction:|$)',
+            r'Action:\s*\w+\s*\[(.+?)\]',
+            r'Action:\s*\w+\s*\((.+?)\)',
+            r'Parameters:\s*\{(.+?)\}',  # Match Parameters: {key: value, key: value}
+        ]
+
+        for pattern in input_patterns:
+            match = re.search(pattern, response_text, re.IGNORECASE | re.DOTALL)
+            if match:
+                action_input = match.group(1).strip()
+                break
+
+        # Execute action
+        if action_name == "semantic_search":
+            # Try to parse parameters in multiple formats
+            table = None
+            query = None
+
+            # Format 1: table='X', query='Y'
+            table_match = re.search(r'table\s*[:=]\s*[\'"]?(\w+)[\'"]?', action_input, re.IGNORECASE)
+            query_match = re.search(r'query\s*[:=]\s*[\'"]([^\'\"]+)[\'"]', action_input, re.IGNORECASE)
+
+            # Format 2: 'table': 'X', 'query': 'Y' (dict-style)
+            if not table_match:
+                table_match = re.search(r'[\'"]table[\'"]\s*:\s*[\'"]?(\w+)[\'"]?', action_input, re.IGNORECASE)
+            if not query_match:
+                query_match = re.search(r'[\'"]query[\'"]\s*:\s*[\'"]([^\'\"]+)[\'"]', action_input, re.IGNORECASE)
+
+            # Also check in full response text if not found in action_input
+            full_text = response_text.lower()
+            if not table_match:
+                table_search = re.search(r'[\'"]table[\'"]\s*:\s*[\'"]?(\w+)[\'"]?', full_text)
+                if table_search:
+                    table_match = table_search
+            if not query_match:
+                query_search = re.search(r'[\'"]query[\'"]\s*:\s*[\'"]([^\'\"]+)[\'"]', full_text)
+                if query_search:
+                    query_match = query_search
+
+            if table_match and query_match:
+                table = table_match.group(1)
+                query = query_match.group(1)
+                observation = execute_semantic_search(db, table, query)
+            else:
+                # Default to institutions/MSU if parsing fails
+                observation = execute_semantic_search(db, "institutions", "MSU")
+
+        elif action_name == "sql_query":
+            # Extract SQL - could be wrapped in quotes or not
+            sql = action_input.strip('"\'')
+
+            # Remove "sql=" prefix if present
+            sql = re.sub(r'^sql\s*[:=]\s*', '', sql, flags=re.IGNORECASE)
+            sql = sql.strip('"\'')
+
+            observation = execute_sql_query(db, sql)
+
+        else:
+            observation = f"Error: Unknown action '{action_name}'. Available: semantic_search, sql_query"
+
+        observations.append(f"Observation: {observation}")
+        iteration += 1
+
+    # Max iterations reached
+    return {
+        "success": False,
+        "response": f"Unable to complete request after maximum iterations ({MAX_ITERATIONS}). The agent could not reach a final answer.",
+        "iterations": MAX_ITERATIONS,
+        "observations": observations
+    }
 
 
 def execute_orchestrator_response(orchestrator_response: str, message: str, page_content: dict = None) -> dict:
