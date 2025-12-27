@@ -1,0 +1,90 @@
+/* Chat Panel Styles - Essential CSS for chat functionality */
+
+/* Force scrolling on chat messages container */
+#chat-messages {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  max-height: calc(100vh - 200px); /* Account for header, input, and padding */
+  min-height: 200px;
+}
+
+/* Custom scrollbar styling for WebKit browsers */
+#chat-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+#chat-messages::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+#chat-messages::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+#chat-messages::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Firefox scrollbar */
+#chat-messages {
+  scrollbar-width: thin;
+  scrollbar-color: #c1c1c1 #f1f1f1;
+}
+
+/* Ensure chat app takes full height */
+#chat-app {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0; /* Allow flex item to shrink */
+}
+
+/* Ensure chat panel container has proper height */
+#chat-panel {
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0; /* Allow flex item to shrink */
+}
+
+/* Ensure messages container takes available space */
+#chat-messages,
+.chat-messages-container {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  height: 0; /* Force flex item to take available space */
+  min-height: 0; /* Allow flex item to shrink below content size */
+  position: relative; /* Ensure proper stacking context */
+}
+
+/* Force scrollbar to always show when content overflows */
+#chat-messages::-webkit-scrollbar {
+  -webkit-appearance: none;
+  width: 8px;
+}
+
+/* Ensure content doesn't get cut off */
+#chat-messages > div {
+  min-height: min-content;
+}
+
+/* Ensure chat input area doesn't interfere with scrolling */
+#chat-app > div:last-child {
+  flex-shrink: 0; /* Prevent input area from shrinking */
+}
+
+/* Mobile chat panel height */
+#mobile-chat-panel {
+  height: 70vh;
+  max-height: 600px;
+}
+
+/* Ensure mobile chat panel has proper height constraints */
+@media (max-height: 600px) {
+  #mobile-chat-panel {
+    height: 80vh;
+  }
+}

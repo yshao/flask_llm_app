@@ -1,0 +1,46 @@
+# Docker Compose for PostgreSQL only
+# Use this for local Flask development
+# Run: docker-compose -f docker-compose-local.yml up -d
+
+version: "3.8"
+
+services:
+  # PostgreSQL database service with pgvector extension
+  postgres:
+    container_name: ${POSTGRES_CONTAINER:-flask_llm_postgres}
+    image: ${POSTGRES_VERSION:-pgvector/pgvector:pg16}
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Database initialization service
+  db-init:
+    image: ${POSTGRES_VERSION:-pgvector/pgvector:pg16}
+    container_name: flask_llm_db_init
+    env_file:
+      - .env
+    environment:
+      DATABASE_INIT_HOST: postgres
+    volumes:
+      - ./init-db.sh:/init-db.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["/bin/bash", "/init-db.sh"]
+    restart: "no"
+
+volumes:
+  postgres_data:

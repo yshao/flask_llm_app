@@ -1,0 +1,13 @@
+{% extends 'layout.html' %}
+
+{% block extrajs %}
+<!-- Dynamically load Vue component based on page type -->
+<script src="{{ url_for('static', filename='js/' + page_type + '-vue.js') }}" defer></script>
+{% endblock %}
+
+{% block maincontent %}
+<!-- Dynamic Vue Component Container -->
+<div id="{{ page_type }}-container">
+  <!-- This will be replaced by the Vue component -->
+</div>
+{% endblock %}

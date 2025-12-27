@@ -1,0 +1,16 @@
+test_id,test_name,test_category,input_message,expected_output_type,expected_output,page_context,active
+1,Basic Greeting,chat_functionality,Hello,contains_text,hello,NULL,TRUE
+2,Help Request,chat_functionality,What can you help me with?,contains_text,help,NULL,TRUE
+3,Capability Query,chat_functionality,What can you do?,contains_text,assist,NULL,TRUE
+4,Empty Message Handling,chat_functionality,,contains_text,message,NULL,TRUE
+5,Institution Query,resume_query,Where did he work?,contains_text,Michigan State University,NULL,TRUE
+6,Skills Query,resume_query,What programming skills does he have?,contains_text,skill,NULL,TRUE
+7,Position Duration,resume_query,How long did he work at his first job?,contains_text,month,NULL,TRUE
+8,Experience Details,resume_query,What was his role at MSU?,contains_text,position,NULL,TRUE
+9,Education Background,resume_query,What is his educational background?,contains_text,education,NULL,TRUE
+10,Skills List,resume_query,List all his technical skills,contains_text,Python,NULL,TRUE
+11,Page Type Identification,page_context,What page am I on?,contains_text,page,"{""title"":""Home"",""url"":""http://0.0.0.0:8080/"",""content"":""<h1>Welcome</h1>""}",TRUE
+12,Content Summary Request,page_context,Summarize this page,contains_text,content,"{""title"":""Resume"",""url"":""http://0.0.0.0:8080/agents/resume"",""content"":""<div>Skills and experience</div>""}",TRUE
+13,Navigation Query,page_context,What other pages are available?,contains_text,agents,"{""title"":""Home"",""url"":""http://0.0.0.0:8080/"",""content"":""<nav>Home | Agents</nav>""}",TRUE
+14,Context-Aware Query,page_context,What information is shown on this page?,contains_text,information,"{""title"":""Resume"",""url"":""http://0.0.0.0:8080/agents/resume"",""content"":""<p>Resume information</p>""}",TRUE
+15,Conversational Follow-up,chat_functionality,Can you tell me more?,contains_text,information,NULL,TRUE
