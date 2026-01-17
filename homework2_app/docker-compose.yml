@@ -1,12 +1,20 @@
-# Author: Prof. MM Ghassemi <ghassem3@msu.edu>
-
-version: "3.8"
+# ============================================================================
+# Docker Compose Configuration
+# ============================================================================
+# Supports two deployment modes:
+#
+# 1. Local Development (PostgreSQL in Docker, Flask runs natively):
+#    docker compose up -d
+#
+# 2. Full Docker (Everything in containers):
+#    docker compose --profile docker up -d
+# ============================================================================
 
 services:
-  # PostgreSQL database service
+  # PostgreSQL database service with pgvector extension
   postgres:
-    container_name: ${POSTGRES_CONTAINER}
-    image: ${POSTGRES_VERSION}
+    container_name: ${POSTGRES_CONTAINER:-flask_llm_postgres}
+    image: ${POSTGRES_VERSION:-pgvector/pgvector:pg16}
     env_file:
       - .env
     environment:
@@ -14,22 +22,26 @@ services:
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - "${DATABASE_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ${DATABASE_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - app-network
 
   # Database initialization service
   db-init:
-    image: ${POSTGRES_VERSION}
-    container_name: ${DB_INIT_CONTAINER}
+    image: ${POSTGRES_VERSION:-pgvector/pgvector:pg16}
+    container_name: flask_llm_db_init
     env_file:
       - .env
+    environment:
+      DATABASE_INIT_HOST: postgres
     volumes:
       - ./init-db.sh:/init-db.sh
     depends_on:
@@ -37,41 +49,39 @@ services:
         condition: service_healthy
     command: ["/bin/bash", "/init-db.sh"]
     restart: "no"
+    networks:
+      - app-network
 
-  # Flask application service
+  # Flask application service (only runs with --profile docker)
   flask-app:
-    container_name: ${FLASK_CONTAINER}
+    container_name: ${FLASK_CONTAINER:-flask_llm_app}
     build:
       context: .
       dockerfile: Dockerfile
     env_file:
       - .env
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      FLASK_HOST: 0.0.0.0
     ports:
-      - "${FLASK_PORT}:8080"
+      - "${FLASK_PORT:-8080}:8080"
     volumes:
-      - .:/app
+      - ./flask_app:/app/flask_app
     depends_on:
       db-init:
         condition: service_completed_successfully
-    environment:
-      - DATABASE_HOST=${DATABASE_HOST}
-      - DATABASE_USER=${DATABASE_USER}
-      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
-      - DATABASE_NAME=${DATABASE_NAME}
-      - DATABASE_PORT=${DATABASE_PORT}
-      - SECRET_KEY=${SECRET_KEY}
-      - FLASK_ENV=${FLASK_ENV}
-      - FLASK_DEBUG=${FLASK_DEBUG}
-      - FLASK_PORT=${FLASK_PORT}
-      - FLASK_HOST=${FLASK_HOST}
-      - SEND_FILE_MAX_AGE_DEFAULT=${SEND_FILE_MAX_AGE_DEFAULT}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI_MODEL=${GEMINI_MODEL}
-      - GEMINI_MAX_TOKENS=${GEMINI_MAX_TOKENS}
-      - GEMINI_TEMPERATURE=${GEMINI_TEMPERATURE}
-      - GEMINI_MAX_CONVERSATION_HISTORY=${GEMINI_MAX_CONVERSATION_HISTORY}
-    stdin_open: true
-    tty: true
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+    profiles:
+      - docker
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   postgres_data:

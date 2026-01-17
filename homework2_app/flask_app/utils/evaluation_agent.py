@@ -1,5 +1,11 @@
 # Author: AI Agent Benchmark System
 # Purpose: Evaluation agent for running benchmarks via A2A Protocol
+#
+# This module provides:
+# - Benchmark suite execution via A2A protocol
+# - Test case evaluation and comparison
+# - Result storage and metrics tracking
+# - Response validation against expected outputs
 
 import time
 import json
@@ -7,6 +13,10 @@ from typing import Dict, Any, List, Optional
 from .a2a_protocol import A2AProtocol
 from .database import database
 
+
+#==================================================
+# EVALUATION AGENT CLASS
+#==================================================
 
 class EvaluationAgent:
     """
@@ -70,7 +80,7 @@ class EvaluationAgent:
             result = self.run_single_test(test_case, target_agent)
             results.append(result)
 
-            status = "✓ PASS" if result['passed'] else "✗ FAIL"
+            status = "[PASS]" if result['passed'] else "[FAIL]"
             print(f"    Result: {status}")
             if result.get('error_message'):
                 print(f"    Error: {result['error_message']}")

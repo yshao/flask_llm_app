@@ -2,8 +2,11 @@ flask
 gunicorn
 cryptography
 flask-socketio
-eventlet==0.30.2
+gevent>=23.0.0
+gevent-websocket
+dnspython>=2.0.0
 google-generativeai
+groq
 psycopg2-binary
 requests
 python-dotenv

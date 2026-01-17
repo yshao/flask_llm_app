@@ -1,3 +1,71 @@
+// ============================================================================
+// CLIENT ERROR LOGGING UTILITIES
+// ============================================================================
+
+/**
+ * Log a client-side error to the server for server-side logging
+ * @param {string} type - Error type: 'error', 'warning', 'network'
+ * @param {string} source - Error source: 'fetch', 'socket', 'general'
+ * @param {string} message - Error message
+ * @param {string} stack - Error stack trace (optional)
+ * @param {object} details - Additional error details (optional)
+ */
+function logClientError(type, source, message, stack = '', details = {}) {
+  const errorData = {
+    type: type,
+    source: source,
+    message: message,
+    url: window.location.href,
+    stack: stack,
+    details: details,
+    timestamp: new Date().toISOString(),
+    userAgent: navigator.userAgent
+  };
+
+  // Send to server asynchronously (don't wait for response)
+  fetch('/api/log/error', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(errorData)
+  }).catch(err => {
+    // Silent fail - we don't want to create infinite error loops
+    console.warn('[LOG] Failed to send error to server:', err);
+  });
+}
+
+/**
+ * Log network request details to the server
+ * @param {string} url - Request URL
+ * @param {string} method - HTTP method
+ * @param {number} duration_ms - Request duration in milliseconds
+ * @param {number} status - HTTP status code
+ * @param {boolean} success - Whether the request succeeded
+ * @param {string} error - Error message (if failed)
+ */
+function logNetworkRequest(url, method, duration_ms, status, success, error = '') {
+  const networkData = {
+    url: url,
+    method: method,
+    duration_ms: duration_ms,
+    status: status,
+    success: success,
+    error: error,
+    timestamp: new Date().toISOString()
+  };
+
+  fetch('/api/log/network', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(networkData)
+  }).catch(err => {
+    console.warn('[LOG] Failed to send network log to server:', err);
+  });
+}
+
+// ============================================================================
+// Chat Vue Component
+// ============================================================================
+
 // Chat Vue Component
 const ChatComponent = {
   template: `
@@ -82,13 +150,16 @@ const ChatComponent = {
     // ============================================================================
     // Core message handling functions - modify these for your AI agent features (if needed)
     // ============================================================================
-    const submitMessage = () => {   
+    const submitMessage = () => {
       const message = inputMessage.value.trim(); // Get the message the user is typing into the chat
       if (!message) return;                     // If the message is empty, do nothing
       inputMessage.value = '';                  // Clear the input field
 
-      // Send user message to the chat history window via SocketIO (this is so that other users can see the message, in case you want mulit-user chat)
-      if (socket.value && isConnected.value) {socket.value.emit('text', {msg:  message,room: CHAT_CONFIG.ROOM_NAME});}
+      // Add user's message to chat display immediately
+      addMessage('user', message);
+
+      // Note: Removed SocketIO emit - user messages are already added locally above
+      // SocketIO echo was being treated as AI response, causing confusion
 
       // Capture the current page content
       const pageContent = {                   // Capture the current page content
@@ -99,33 +170,52 @@ const ChatComponent = {
       };
       
       // Log the captured page content for debugging
-      console.log('Page content captured:', pageContent);
+      console.log('[SEND] Message:', message);
+      console.log('[SEND] Page URL:', pageContent.url);
+      console.log('[SEND] Page Title:', pageContent.title);
+      console.log('[SEND] Content length:', pageContent.content.length);
 
       // Show typing indicator and send to AI
       setTimeout(() => {
         showTypingIndicator();                // Show the typing indicator
         ChatStore.incrementAICount();         // Increment AI message counter in global store
         aiMessageCount.value = ChatStore.aiMessageCount; // Update local reactive state
-        sendMessageToAI(message, pageContent); // Send the message to the AI  
+        sendMessageToAI(message, pageContent); // Send the message to the AI
       }, CHAT_CONFIG.TYPING_DELAY);           // The delay before showing the typing indicator
     };
 
     const handleAIResponse = (data) => {
-      console.log('Handling AI response:', data);
+      console.log('[RESPONSE] Received response:', data);
+      console.log('[RESPONSE] Success:', data.success);
+      console.log('[RESPONSE] Has response:', !!data.response);
+      console.log('[RESPONSE] Has error:', data.error);
+      console.log('[RESPONSE] Full data:', JSON.stringify(data));
+
       // Then render the chat message
       removeTypingIndicator();
+
+      // Handle error response
+      // Note: SocketIO messages don't have a 'success' field - they're only for successful AI responses
+      // Fetch responses have 'success' field and can be errors
+      if (data.success === false) {
+        const errorMsg = data.response || data.error || 'Unknown error';
+        console.error('[RESPONSE] AI request failed:', errorMsg);
+        addMessage('assistant', `Error: ${errorMsg}`);
+        return;
+      }
+
+      // For both SocketIO (no success field) and successful fetch (success: true)
+      // render the response
       const role = data.role || 'user';
-      addMessage(role, data.msg, false, data.style);  // Add the AI response to the chat history window
-      
+      addMessage(role, data.msg || data.response, false, data.style);  // Add the AI response to the chat history window
+
       // ============================================================================
       // ADD YOUR POST-RESPONSE ACTIONS HERE
       // ============================================================================
-      
-      // Example: Log the response for debugging
-      console.log('AI Response received:', data);
-      
-      // Example: Track response statistics
-      console.log(`Total AI interactions: ${aiMessageCount.value} messages sent, response received`);
+
+      // Log successful response
+      console.log('[RESPONSE] AI Response received:', data);
+      console.log(`[RESPONSE] Total AI interactions: ${aiMessageCount.value} messages sent, response received`);
 
       // ============================================================================
       // HOMEWORK 1: POST-RESPONSE ACTIONS FOR REAL-TIME UPDATES
@@ -216,10 +306,19 @@ function refreshResumeDisplays() {
     // Helper functions follow (you probably don't need to modify these)
     // ============================================================================
     const sendMessageToAI = (message, pageContent) => {
-      const requestBody = { 
+      const requestBody = {
         message: message,
         pageContent: pageContent
       };
+
+      console.log('[FETCH] Sending request to /chat/ai');
+      console.log('[FETCH] Request body:', {
+        messageLength: message.length,
+        pageUrl: pageContent.url,
+        pageTitle: pageContent.title
+      });
+
+      const startTime = Date.now();
 
       fetch('/chat/ai', {
         method: 'POST',
@@ -228,64 +327,184 @@ function refreshResumeDisplays() {
         },
         body: JSON.stringify(requestBody)
       })
-      .then(response => response.json())
-      .then(data => {
-        if (!data.success) {
+      .then(response => {
+        const elapsedTime = Date.now() - startTime;
+        console.log(`[FETCH] Response received in ${elapsedTime}ms`);
+        console.log('[FETCH] Response status:', response.status, response.statusText);
+
+        // Log network request to server
+        logNetworkRequest('/chat/ai', 'POST', elapsedTime, response.status, response.ok);
+
+        // Check if response is ok (status 200-299)
+        if (!response.ok) {
+          const errorMsg = `HTTP Error ${response.status}: ${response.statusText}`;
+          console.error('[FETCH] HTTP Error:', response.status, response.statusText);
+
+          // Log error to server
+          logClientError('error', 'fetch', errorMsg, '', {
+            status: response.status,
+            statusText: response.statusText,
+            url: '/chat/ai',
+            method: 'POST'
+          });
+
           removeTypingIndicator();
-          addMessage('assistant', 'AI service error. Please try again.');
+          addMessage('assistant', `HTTP Error ${response.status}: ${response.statusText}. Please try again.`);
+          return null;
+        }
+
+        return response.json();
+      })
+      .then(data => {
+        if (!data) {
+          // Already handled by response.ok check above
           return;
         }
-        // Note: UI highlighting functionality has been removed
+
+        console.log('[FETCH] Parsed JSON response:', data);
+
+        if (!data.success) {
+          const errorMsg = data.error || data.response || 'Unknown error';
+          console.error('[FETCH] API Error:', errorMsg);
+          console.error('[FETCH] Full error data:', JSON.stringify(data));
+
+          // Log error to server
+          logClientError('error', 'api', errorMsg, '', {
+            fullResponse: data,
+            url: '/chat/ai',
+            method: 'POST'
+          });
+
+          removeTypingIndicator();
+          addMessage('assistant', `Error: ${errorMsg}`);
+          return;
+        }
+
+        // Success - note: UI highlighting functionality has been removed
+        console.log('[FETCH] Request successful');
       })
       .catch(error => {
+        const elapsedTime = Date.now() - startTime;
+        console.error(`[FETCH] Network error after ${elapsedTime}ms:`, error);
+        console.error('[FETCH] Error name:', error.name);
+        console.error('[FETCH] Error message:', error.message);
+        console.error('[FETCH] Error stack:', error.stack);
+
+        // Log error to server
+        logClientError('error', 'fetch', error.message, error.stack, {
+          errorName: error.name,
+          duration_ms: elapsedTime,
+          url: '/chat/ai',
+          method: 'POST'
+        });
+
         removeTypingIndicator();
-        addMessage('assistant', 'AI service error. Please try again.');
-        console.error('AI service error:', error);
+
+        // Provide more specific error messages based on error type
+        let errorMessage = 'AI service error. Please try again.';
+
+        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+          errorMessage = 'Network error: Unable to reach the server. Please check your connection.';
+        } else if (error.name === 'AbortError') {
+          errorMessage = 'Request timed out. Please try again.';
+        }
+
+        addMessage('assistant', errorMessage);
       });
     };
 
 
     const initializeSocketIO = () => {
       try {
+        console.log('[SOCKET] Initializing SocketIO connection...');
+        console.log('[SOCKET] Namespace:', CHAT_CONFIG.SOCKET_NAMESPACE);
         socket.value = io(CHAT_CONFIG.SOCKET_NAMESPACE);
         setupSocketEventHandlers();
-        console.log('SocketIO connection initialized');
+        console.log('[SOCKET] SocketIO connection initialized successfully');
       } catch (error) {
-        console.error('Failed to initialize SocketIO:', error);
-        addMessage('assistant', 'Failed to connect to chat server');
+        console.error('[SOCKET] Failed to initialize SocketIO:', error);
+        console.error('[SOCKET] Error name:', error.name);
+        console.error('[SOCKET] Error message:', error.message);
+
+        // Log to server
+        logClientError('error', 'socket', error.message, error.stack, {
+          errorName: error.name,
+          phase: 'initialization'
+        });
+
+        addMessage('assistant', 'Failed to connect to chat server. Please refresh the page.');
       }
     };
 
     const setupSocketEventHandlers = () => {
-      if (!socket.value) return;
+      if (!socket.value) {
+        console.error('[SOCKET] No socket instance available');
+        return;
+      }
 
       socket.value.on('connect', () => {
+        console.log('[SOCKET] Connected successfully');
+        console.log('[SOCKET] Socket ID:', socket.value.id);
         ChatStore.setConnectionStatus(true);
         isConnected.value = true;
-        console.log('Connected to chat room:', CHAT_CONFIG.ROOM_NAME);
-        
-        socket.value.emit('joined', { 
-          room: CHAT_CONFIG.ROOM_NAME 
+        console.log('[SOCKET] Joining room:', CHAT_CONFIG.ROOM_NAME);
+
+        socket.value.emit('joined', {
+          room: CHAT_CONFIG.ROOM_NAME
         });
       });
 
       socket.value.on('message', (data) => {
+        console.log('[SOCKET] Message received:', data);
+        console.log('[SOCKET] Message type:', data.role || 'unknown');
+        console.log('[SOCKET] Message content length:', data.msg?.length || 0);
         removeTypingIndicator();
         handleAIResponse(data);
       });
 
       socket.value.on('connect_error', (error) => {
+        console.error('[SOCKET] Connection error:', error);
+        console.error('[SOCKET] Error description:', error.description);
+        console.error('[SOCKET] Error context:', error.context);
+
+        // Log to server
+        logClientError('error', 'socket', error.description || error.message || 'Socket connection error', '', {
+          errorType: 'connect_error',
+          description: error.description,
+          context: error.context
+        });
+
         ChatStore.setConnectionStatus(false);
         isConnected.value = false;
-        console.error('SocketIO connection error:', error);
         addMessage('assistant', 'Connection error. Trying to reconnect...');
       });
 
-      socket.value.on('disconnect', () => {
+      socket.value.on('disconnect', (reason) => {
+        console.log('[SOCKET] Disconnected. Reason:', reason);
         ChatStore.setConnectionStatus(false);
         isConnected.value = false;
-        console.log('Disconnected from chat room');
         // Removed disconnect message to avoid showing it when switching tabs
+      });
+
+      socket.value.on('reconnect', (attemptNumber) => {
+        console.log(`[SOCKET] Reconnected after ${attemptNumber} attempts`);
+        ChatStore.setConnectionStatus(true);
+        isConnected.value = true;
+      });
+
+      socket.value.on('reconnect_attempt', (attemptNumber) => {
+        console.log(`[SOCKET] Reconnection attempt ${attemptNumber}`);
+      });
+
+      socket.value.on('reconnect_failed', () => {
+        console.error('[SOCKET] Reconnection failed');
+
+        // Log to server
+        logClientError('error', 'socket', 'Failed to reconnect after multiple attempts', '', {
+          errorType: 'reconnect_failed'
+        });
+
+        addMessage('assistant', 'Failed to reconnect to server. Please refresh the page.');
       });
     };
 
@@ -362,3 +581,33 @@ function refreshResumeDisplays() {
 
 // Use the shared Vue utilities for initialization
 VueAppFactory.createApp(ChatComponent, 'chat-container', 'Chat App');
+
+// ============================================================================
+// GLOBAL ERROR HANDLERS
+// ============================================================================
+
+/**
+ * Global error handler for unhandled JavaScript errors
+ */
+window.addEventListener('error', (event) => {
+  console.error('[GLOBAL ERROR]', event.error);
+
+  // Log to server
+  logClientError('error', 'global', event.error?.message || 'Unknown error', event.error?.stack || '', {
+    filename: event.filename,
+    lineno: event.lineno,
+    colno: event.colno
+  });
+});
+
+/**
+ * Global handler for unhandled promise rejections
+ */
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[UNHANDLED REJECTION]', event.reason);
+
+  // Log to server
+  logClientError('error', 'promise', event.reason?.message || 'Unhandled promise rejection', event.reason?.stack || '', {
+    reason: String(event.reason)
+  });
+});

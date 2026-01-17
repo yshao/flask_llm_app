@@ -18,7 +18,7 @@ DB_RETRY_DELAY = 2
 #--------------------------------------------------
 # GLOBAL INSTANCES
 #--------------------------------------------------
-socketio = SocketIO()
+socketio = SocketIO(async_mode='threading', cors_allowed_origins="*")
 
 #--------------------------------------------------
 # DATABASE INITIALIZATION
@@ -128,6 +128,13 @@ def create_app(debug=False):
         # Register socket events
         from .utils.socket_events import register_socket_events
         register_socket_events(socketio, db)
+
+    # Add context processor for cache-busting
+    @app.context_processor
+    def cache_buster():
+        """Provide cache-busting timestamp for static assets."""
+        import time
+        return {'cache_buster': int(time.time())}
 
     # Add request/response middleware
     @app.after_request

@@ -1,0 +1,59 @@
+2025-12-31 22:46:48,042 - INFO - Starting Homework 1 Evaluation
+2025-12-31 22:46:48,153 - INFO - Infrastructure check: MSU=1, GA=1
+2025-12-31 22:46:48,169 - WARNING - Flask app returned non-200 status: 500
+2025-12-31 22:46:48,169 - INFO - Starting Test 1: Database Read Expert
+2025-12-31 22:46:48,174 - ERROR - Test 1: Unexpected error - 405 Client Error: METHOD NOT ALLOWED for url: http://localhost:8080/chat/ai
+2025-12-31 22:46:48,180 - ERROR - Test 3: Unexpected error - 405 Client Error: METHOD NOT ALLOWED for url: http://localhost:8080/chat/ai
+
+============================================================
+  HOMEWORK 1 EVALUATION (IMPROVED)
+============================================================
+
+=== INFRASTRUCTURE CHECK ===
+✓ Michigan State University: 1 record(s) found
+✓ Graduate Assistant position: 1 record(s) found
+⚠️  WARNING: Flask app returned status 500
+✓ Infrastructure check complete
+
+
+Test 1: Database Read Expert (25 points)
+------------------------------------------------------------
+Query: How long did they work at Michigan State University?
+✗ ERROR: 405 Client Error: METHOD NOT ALLOWED for url: http://localhost:8080/chat/ai
+SCORE: 0/25
+
+Test 2: Database Write Expert (25 points)
+------------------------------------------------------------
+Query: Add 'Test_Skill_20251231_224648' as a skill to my resume
+Skill name: Test_Skill_20251231_224648
+✗ ERROR: 405 Client Error: METHOD NOT ALLOWED for url: http://localhost:8080/chat/ai
+SCORE: 0/25
+
+Test 3: Orchestrator Coordination (25 points)
+------------------------------------------------------------
+Query: Check if he has Python and add it to all experiences at Graduate Assistant if missing
+✗ ERROR: 405 Client Error: METHOD NOT ALLOWED for url: http://localhost:8080/chat/ai
+SCORE: 0/25
+
+Test 4: Database Schema (25 points)
+------------------------------------------------------------
+✓ llm_roles table exists: YES (25/25)
+✓ Expert configurations: 4 found
+
+Sample expert configurations:
+  - role_id=1, role_name=Database Read Expert, domain=PostgreSQL database queries and data analysis
+  - role_id=2, role_name=Database Write Expert, domain=PostgreSQL database modifications and Python database operations
+  - role_id=3, role_name=Content Expert, domain=Current page content analysis and contextual responses
+  - role_id=4, role_name=Orchestrator, domain=Multi-expert coordination and task analysis
+✓ All expected columns present
+
+SCORE: 25/25
+✓ PASSED - Table exists with expert configurations
+
+============================================================
+  FINAL RESULTS
+============================================================
+TOTAL SCORE: 25/100
+
+✗ FAILED - 75 points lost
+============================================================

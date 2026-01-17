@@ -1,4 +1,13 @@
 # Author: Prof. MM Ghassemi <ghassem3@msu.edu>
+#
+# Database module for PostgreSQL operations with pgvector support.
+# This module provides:
+# - Database connection and query execution
+# - Table creation and initial data import
+# - User authentication with encryption
+# - Semantic search using vector embeddings
+# - Benchmark testing functionality
+# - Resume data retrieval
 
 import psycopg2
 import psycopg2.extras
@@ -19,6 +28,10 @@ try:
 except ImportError:
     EMBEDDING_AVAILABLE = False
 
+#==================================================
+# DATABASE CLASS
+#==================================================
+
 class database:
     """
     Database management class for PostgreSQL operations.
@@ -27,6 +40,9 @@ class database:
     and user authentication with encryption support.
     """
 
+    #==================================================
+    # INITIALIZATION
+    #==================================================
     def __init__(self, purge=False):
         """
         Initialize database connection and configuration.

@@ -7,9 +7,9 @@
 
   <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>   <!-- Vue 3 from CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>   <!-- SocketIO Client Library -->
-  <script src="{{ url_for('static', filename='js/utils/vue-utils.js') }}"></script>   <!-- Vue Utilities -->
-  <script src="{{ url_for('static', filename='js/utils/chat-store.js') }}"></script>   <!-- Chat Store -->
-  <script src="{{ url_for('static', filename='js/chat-vue.js') }}" defer></script>   <!-- Vue Chat Component -->
+  <script src="{{ url_for('static', filename='js/utils/vue-utils.js') }}?v={{ cache_buster }}"></script>   <!-- Vue Utilities -->
+  <script src="{{ url_for('static', filename='js/utils/chat-store.js') }}?v={{ cache_buster }}"></script>   <!-- Chat Store -->
+  <script src="{{ url_for('static', filename='js/chat-vue.js') }}?v={{ cache_buster }}" defer></script>   <!-- Vue Chat Component -->
   <script src="https://cdn.tailwindcss.com"></script>   <!-- Tailwind CSS -->
   
   <!-- Custom CSS for any remaining custom styles -->

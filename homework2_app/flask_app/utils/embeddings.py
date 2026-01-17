@@ -1,21 +1,25 @@
 # Author: Prof. MM Ghassemi <ghassem3@msu.edu>
 # Homework 2: Vector Embeddings Service
-
-"""
-Vector embeddings service using Google Gemini API.
-
-Generates 768-dimensional embeddings for text content to enable
-semantic similarity search across database records.
-"""
+#
+# Vector embeddings service using Google Gemini API.
+# Generates 768-dimensional embeddings for text content to enable
+# semantic similarity search across database records.
 
 import os
 import time
 import random
 import google.generativeai as genai
 
+#==================================================
+# CONFIGURATION
+#==================================================
 # Gemini's text-embedding-004 produces 768-dimensional vectors
 EMBEDDING_DIM = 768
 
+
+#==================================================
+# EMBEDDING GENERATION FUNCTIONS
+#==================================================
 
 def generate_embedding(text: str, max_retries: int = 3) -> list:
     """
@@ -132,6 +136,10 @@ def generate_query_embedding(text: str, max_retries: int = 3) -> list:
 
     return None
 
+
+#==================================================
+# SIMILARITY CALCULATION
+#==================================================
 
 def cosine_similarity(embedding1: list, embedding2: list) -> float:
     """

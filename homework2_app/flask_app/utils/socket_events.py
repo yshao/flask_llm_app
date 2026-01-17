@@ -1,9 +1,29 @@
 # Author: Prof. MM Ghassemi <ghassem3@msu.edu>
+#
+# SocketIO event handlers for real-time chat functionality.
+# This module provides:
+# - SocketIO event registration
+# - Message processing and emission
+# - Chat room management
+# - Message styling based on user role
+
 import time
 from flask_socketio import emit, join_room, leave_room
 
+#==================================================
+# CHAT STYLING FUNCTIONS
+#==================================================
+
 def get_chat_style(role='owner'):
-    """Get styling for chat messages based on role."""
+    """
+    Get styling for chat messages based on role.
+
+    Args:
+        role: User role (owner, ai, guest)
+
+    Returns:
+        CSS style string for message formatting
+    """
     if role == 'owner':
         return 'width: 100%;color:blue;text-align: right'
     elif role == 'ai':
@@ -11,11 +31,16 @@ def get_chat_style(role='owner'):
     else:  # guest or any other role
         return 'width: 100%;color:green;text-align: right'
 
+
+#==================================================
+# MESSAGE PROCESSING
+#==================================================
+
 def process_and_emit_message(socketio, message, user_role='guest', room='main'):
     """
     Centralized function to process and emit all chat messages.
     This ensures consistent logging and processing for all message types.
-    
+
     Args:
         socketio: SocketIO instance
         message: The message content
@@ -23,45 +48,66 @@ def process_and_emit_message(socketio, message, user_role='guest', room='main'):
         room: Chat room to emit to
     """
     try:
-        print(f"""message: from {user_role} to `{room}` room 
+        print(f"""message: from {user_role} to `{room}` room
         message: {message}""")
-        
+
         # Emit to frontend with both role and style for clarity
         socketio.emit('message', {
             'msg': message,
             'role': user_role,
             'style': get_chat_style(user_role)
         }, room=room, namespace='/chat')
-        
+
     except Exception as e:
         print(f"Error in process_and_emit_message: {str(e)}")
         import traceback
         traceback.print_exc()
 
+
+#==================================================
+# SOCKET EVENT REGISTRATION
+#==================================================
+
 def register_socket_events(socketio, db):
-    """Register SocketIO event handlers and AI broadcasting."""
-    
-    #--------------------------------------------------
+    """
+    Register SocketIO event handlers and AI broadcasting.
+
+    Args:
+        socketio: SocketIO instance
+        db: Database instance for user operations
+    """
+
+    #==================================================
     # SOCKET EVENT HANDLERS
-    #--------------------------------------------------
-    
+    #==================================================
+
     @socketio.on('joined', namespace='/chat')
     def joined(message={'room': 'main'}):
-        """Handle user joining chat room."""
+        """
+        Handle user joining chat room.
+
+        Args:
+            message: Message containing room information
+        """
         room = message.get('room', 'main')
         join_room(room)
 
     @socketio.on('text', namespace='/chat')
     def text(message={'msg': 'Hello', 'room': 'main'}):
-        """Handle user text messages in chat."""
+        """
+        Handle user text messages in chat.
+
+        Args:
+            message: Message containing text content and room
+        """
         try:
             room = message.get('room', 'main')
             user_email = db.get_user_email()
             user_role = db.get_user_role()
-            
+
             # Use centralized message processing
             process_and_emit_message(socketio, message.get('msg', ''), user_role, room)
-        
+
         except Exception as e:
             print(f"Error in text handler: {str(e)}")
             import traceback

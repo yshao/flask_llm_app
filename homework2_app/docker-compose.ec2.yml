@@ -1,0 +1,72 @@
+# Docker Compose file for EC2 deployment
+# This file is optimized for EC2 t2.micro (1GB RAM) free tier
+# Save to EC2 instance as /home/ec2-user/flask-app/docker-compose.yml
+
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: flask-postgres
+    environment:
+      POSTGRES_DB: homework_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_HOST_AUTH_METHOD: password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d homework_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    # Resource limits for t2.micro (1GB RAM)
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  flask-app:
+    image: ${FLASK_IMAGE:-your-dockerhub-username/flask-llm-app:latest}
+    container_name: flask-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FLASK_ENV: production
+      FLASK_DEBUG: "false"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: homework_db
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      SECRET_KEY: ${SECRET_KEY:-change-this-secret-key}
+      ENCRYPTION_REVERSIBLE_KEY: ${ENCRYPTION_KEY:-change-this-encryption-key}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    # Resource limits for t2.micro (1GB RAM)
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+volumes:
+  postgres-data:
+    driver: local

@@ -1,9 +1,19 @@
 # Author: AI Agent Benchmark System
 # Purpose: Agent-to-Agent (A2A) Protocol for structured inter-agent communication
+#
+# This module provides:
+# - A2AMessage class for structured inter-agent messages
+# - A2AProtocol class for managing agent communication
+# - Request/response lifecycle management
+# - Message tracking and history for debugging
 
 import uuid
 from typing import Dict, Any, Optional
 from datetime import datetime
+
+#==================================================
+# A2A MESSAGE CLASS
+#==================================================
 
 class A2AMessage:
     """
@@ -56,6 +66,10 @@ class A2AMessage:
             msg.timestamp = data['timestamp']
         return msg
 
+
+#==================================================
+# A2A PROTOCOL CLASS
+#==================================================
 
 class A2AProtocol:
     """

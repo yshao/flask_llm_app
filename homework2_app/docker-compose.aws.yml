@@ -1,0 +1,29 @@
+version: '3.8'
+
+# Docker Compose for AWS Deployment
+# Use for local development before deploying to AWS ECS
+# Run: docker-compose -f docker-compose.aws.yml up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: homework2_postgres_local
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: homework_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d homework_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:

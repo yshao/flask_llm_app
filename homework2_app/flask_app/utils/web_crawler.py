@@ -1,12 +1,13 @@
-# Author: AI Agent Benchmark System - Homework 3
-# Purpose: Web Crawling Agent for analyzing web content from URLs
-
-"""
-Web Crawling Agent for analyzing web content from URLs.
-
-Accepts A2A protocol requests, stores processed content in documents table.
-Uses BeautifulSoup for HTML parsing and LLM for content cleaning.
-"""
+# Author: AI Agent Benchmark System - Homework 2
+#
+# Web Crawling Agent for analyzing web content from URLs.
+#
+# This module provides:
+# - URL crawling with HTML parsing
+# - Content extraction and cleaning
+# - Text segmentation into chunks
+# - Vector embedding generation for semantic search
+# - A2A protocol integration for agent communication
 
 import requests
 from bs4 import BeautifulSoup
@@ -15,6 +16,10 @@ from .a2a_protocol import A2AProtocol, A2AMessage
 from .embeddings import generate_embedding
 from .database import database
 
+
+#==================================================
+# WEB CRAWLER AGENT
+#==================================================
 
 class WebCrawlerAgent:
     """
@@ -78,6 +83,9 @@ class WebCrawlerAgent:
             error="Unknown action"
         )
 
+    #==================================================
+    # CRAWLING METHODS
+    #==================================================
     def _crawl_url(self, url: str) -> Dict[str, Any]:
         """
         Crawl a web page, clean content, chunk it, and store with embeddings.
@@ -94,7 +102,7 @@ class WebCrawlerAgent:
             response.raise_for_status()
 
             # Parse HTML
-            soup = BeautifulSoup(response.text, 'lxml')
+            soup = BeautifulSoup(response.text, 'html.parser')
             title = soup.title.string if soup.title else "No title"
 
             # Remove non-content elements
@@ -144,6 +152,9 @@ class WebCrawlerAgent:
         except Exception as e:
             return {"url": url, "error": str(e), "status": "error"}
 
+    #==================================================
+    # TEXT PROCESSING METHODS
+    #==================================================
     def _clean_text_with_llm(self, text: str) -> str:
         """
         Use LLM to clean web content.
