@@ -18,8 +18,9 @@ DB_RETRY_DELAY = 2
 #--------------------------------------------------
 # GLOBAL INSTANCES
 #--------------------------------------------------
-# Use asyncio mode for uvicorn ASGI server compatibility
-socketio = SocketIO(async_mode='asyncio', cors_allowed_origins="*")
+# Use gevent mode for compatibility (gevent is installed)
+# Note: For uvicorn ASGI, use async_mode='asyncio' with proper ASGI setup
+socketio = SocketIO(async_mode='gevent', cors_allowed_origins="*")
 
 #--------------------------------------------------
 # DATABASE INITIALIZATION

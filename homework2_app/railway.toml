@@ -1,0 +1,74 @@
+# ============================================================================
+# RAILWAY DEPLOYMENT CONFIGURATION
+# ============================================================================
+# Railway automatically detects and uses this file for deployment
+# Documentation: https://docs.railway.app/reference/deployment-config
+# ============================================================================
+
+# -----------------------------------------------------------------------------
+# Project Configuration
+# -----------------------------------------------------------------------------
+
+[project]
+# Build configuration from Dockerfile
+[build]
+builder = "DOCKERFILE"
+# Path to Dockerfile relative to project root (homework2_app directory)
+dockerfilePath = "homework2_app/Dockerfile"
+# Build context - where COPY commands look for files
+# Set to "homework2_app" so requirements.txt and other files are found
+context = "homework2_app"
+
+# -----------------------------------------------------------------------------
+# Service Configuration
+# -----------------------------------------------------------------------------
+
+[service]
+# Railway automatically assigns a PORT and injects it as environment variable
+# The app should read from the PORT environment variable
+name = "flask-llm-app"
+
+# Health check configuration
+[service.health_check]
+# HTTP health check endpoint
+http_path = "/health"
+http_method = "GET"
+# Expected response status codes (200-299 are healthy)
+status_codes = [200, 302]
+# Check interval
+interval = "30s"
+# Timeout for each check
+timeout = "10s"
+# Grace period before starting health checks
+grace_period = "60s"
+# Number of consecutive failures before marking unhealthy
+failure_threshold = 3
+
+# -----------------------------------------------------------------------------
+# Environment Variables (Set in Railway Dashboard, not here)
+# -----------------------------------------------------------------------------
+# Required environment variables (configure in Railway UI):
+#
+# Google Gemini API:
+#   GEMINI_API_KEY=your_key_here
+#   GEMINI_MODEL=gemini-2.5-flash
+#
+# Groq API (for chatbot):
+#   GROQ_API_KEY=your_key_here
+#   GROQ_MODEL=llama-3.3-70b-versatile
+#
+# Database (add PostgreSQL service in Railway):
+#   DATABASE_HOST=${{Postgres.HOSTNAME}}
+#   DATABASE_NAME=${{Postgres.DATABASE}}
+#   DATABASE_USER=${{Postgres.USERNAME}}
+#   DATABASE_PASSWORD=${{Postgres.PASSWORD}}
+#   DATABASE_PORT=${{Postgres.PORT}}
+#
+# Flask Configuration:
+#   FLASK_ENV=production
+#   SECRET_KEY=your_secret_key_here
+#
+# Encryption:
+#   ENCRYPTION_ONEWAY_SALT=your_random_salt
+#   ENCRYPTION_REVERSIBLE_KEY=your_encryption_key
+# -----------------------------------------------------------------------------
