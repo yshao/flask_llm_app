@@ -39,14 +39,14 @@ class Config:
     POSTGRES_PORT = int(os.environ.get('POSTGRES_PORT', 5432))
     
     #--------------------------------------------------
-    # GOOGLE GEMINI CONFIGURATION
+    # GROQ CONFIGURATION
     #--------------------------------------------------
-    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
-    GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-1.5-flash')
-    GEMINI_MAX_TOKENS = int(os.environ.get('GEMINI_MAX_TOKENS', 4000))
-    GEMINI_MAX_CONVERSATION_HISTORY = int(os.environ.get('GEMINI_MAX_CONVERSATION_HISTORY', 1))
-    GEMINI_TEMPERATURE = float(os.environ.get('GEMINI_TEMPERATURE', 0.7))
-    GEMINI_SYSTEM_PROMPT = os.environ.get('GEMINI_SYSTEM_PROMPT', 'You are a helpful AI assistant. Provide clear, concise, and accurate responses.')
+    GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
+    GROQ_MODEL = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
+    GROQ_MAX_TOKENS = int(os.environ.get('GROQ_MAX_TOKENS', 4000))
+    GROQ_MAX_CONVERSATION_HISTORY = int(os.environ.get('GROQ_MAX_CONVERSATION_HISTORY', 1))
+    GROQ_TEMPERATURE = float(os.environ.get('GROQ_TEMPERATURE', 0.7))
+    GROQ_SYSTEM_PROMPT = os.environ.get('GROQ_SYSTEM_PROMPT', 'You are a helpful AI assistant. Provide clear, concise, and accurate responses.')
 
     #--------------------------------------------------
     # OPENAI CONFIGURATION (retained for reference)

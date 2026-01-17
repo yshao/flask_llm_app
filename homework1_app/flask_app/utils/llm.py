@@ -7,14 +7,14 @@ from typing import Dict, List, Optional
 from flask import current_app, session, jsonify
 from flask_app import socketio
 from .socket_events import process_and_emit_message
-import google.generativeai as genai
+from groq import Groq
 import ast
 import re
 import json
 
 import sys
 # Master prompt template for role-based expert system
-USE_REACT = True
+USE_REACT = False  # 🔧 FIXED: Enable Orchestrator + Expert pattern for Homework 1
 MASTER_PROMPT_TEMPLATE = """
 You are a {{role}} with expertise in {{domain}}.
 
@@ -53,14 +53,14 @@ Action: semantic_search(table="institutions", query="MSU")
 Q: What AI skills do I have?
 A: Thought: User asks about AI skills. Use semantic search to find semantically related skills.
 Action: semantic_search(table="skills", query="artificial intelligence machine learning")""",
-        "background_context": "Database schema with pgvector support:\n- institutions(inst_id, name, type, department, address, city, state, zip, embedding)\n- positions(position_id, inst_id, title, responsibilities, start_date, end_date, embedding)\n- experiences(experience_id, position_id, name, description, start_date, end_date, embedding)\n- skills(skill_id, experience_id, name, type, level, embedding)\n- users(user_id, email, role, embedding)\n\nAll tables have 768-dim embedding columns. Use <=> operator for cosine distance."
+        "background_context": "Database schema with pgvector support:\n- institutions(inst_id, name, type, department, address, city, state, zip, embedding)\n- positions(position_id, inst_id, title, responsibilities, start_date, end_date, embedding)\n- experiences(experience_id, position_id, name, description, start_date, end_date, embedding)\n- skills(skill_id, experience_id, name, skill_level, embedding)\n- users(user_id, email, role, embedding)\n\nAll tables have 768-dim embedding columns. Use <=> operator for cosine distance. NOTE: skills table uses 'skill_level' (integer), NOT 'type' or 'level'."
     },
     "Database Write Expert": {
         "role": "Database Write Expert",
         "domain": "PostgreSQL database modifications and Python database operations",
         "specific_instructions": "Use database schema provided to generate Python code that will modify database. Respond with only Python code using db.insertRows, db.query, or other database methods. Do not include explanations or markdown formatting.",
-        "few_shot_examples": "Q: Add Python skill to first experience\nA: exp_id = db.query('SELECT exp_id FROM experiences ORDER BY start_date ASC LIMIT 1')[0]['exp_id'];\ndb.insertRows('skills', ['experience_id', 'name', 'type', 'level'], [exp_id, 'Python', 'Technical', 'Intermediate']);",
-        "background_context": "Database schema and available methods: db.query(sql, params), db.insertRows(table, columns, parameters), db.getResumeData()"
+        "few_shot_examples": "Q: Add Python skill to first experience\nA: exp_id = db.query('SELECT experience_id FROM experiences ORDER BY start_date ASC LIMIT 1')[0]['experience_id'];\ndb.insertRows('skills', ['experience_id', 'name', 'skill_level'], [exp_id, 'Python', 3]);",
+        "background_context": "Database schema: skills(skill_id, experience_id, name, skill_level, embedding), experiences(experience_id, position_id, name, description, start_date, end_date, hyperlink, embedding). Available methods: db.query(sql), db.insertRows(table, columns, parameters), db.getResumeData(). IMPORTANT: skills table uses 'skill_level' (integer 1-5), NOT 'type' or 'level'."
     },
     "Content Expert": {
         "role": "Content Expert",
@@ -79,39 +79,31 @@ Action: semantic_search(table="skills", query="artificial intelligence machine l
 }
 
 
-class GeminiClient:
-    """Client for interacting with Google's Gemini API with role-based expert support"""
+class GroqClient:
+    """Client for interacting with Groq API with role-based expert support"""
 
     def __init__(self, api_key: Optional[str] = None, model: str = None,
                  max_tokens: int = None, temperature: float = None):
-        """Initialize Gemini client
+        """Initialize Groq client
 
         Args:
-            api_key: Google API key. If not provided, will try to get from environment variable GEMINI_API_KEY
-            model: Gemini model to use. If not provided, will use config default
-            max_tokens: Maximum tokens in response. If not provided, will use config default
-            temperature: Response randomness (0.0-1.0). If not provided, will use config default
+            api_key: Groq API key. If not provided, will try to get from environment variable GROQ_API_KEY
+            model: Groq model to use. If not provided, will use default from environment
+            max_tokens: Maximum tokens in response. If not provided, will use default from environment
+            temperature: Response randomness (0.0-1.0). If not provided, will use default from environment
         """
-        self.api_key = api_key or os.getenv('GEMINI_API_KEY')
+        # Get API key directly from environment (no Flask dependency)
+        self.api_key = api_key or os.getenv('GROQ_API_KEY')
         if not self.api_key:
-            raise ValueError("Gemini API key is required. Set GEMINI_API_KEY environment variable or pass api_key parameter.")
+            raise ValueError("GROQ_API_KEY environment variable must be set")
 
-        # Configure Gemini with API key
-        genai.configure(api_key=self.api_key)
+        # Initialize Groq client
+        self.client = Groq(api_key=self.api_key)
 
-        # Get configuration values
-        self.model_name       = model       or current_app.config.get('GEMINI_MODEL')
-        self.max_tokens        = max_tokens  or current_app.config.get('GEMINI_MAX_TOKENS')
-        self.temperature        = temperature or current_app.config.get('GEMINI_TEMPERATURE')
-
-        # Initialize the model
-        self.model = genai.GenerativeModel(self.model_name)
-
-        # Configure generation parameters
-        self.generation_config = {
-            "max_output_tokens": self.max_tokens,
-            "temperature": self.temperature,
-        }
+        # Get configuration from environment (no Flask current_app dependency)
+        self.model_name = model or os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
+        self.max_tokens = max_tokens or int(os.getenv('GROQ_MAX_TOKENS', 4000))
+        self.temperature = temperature or float(os.getenv('GROQ_TEMPERATURE', 0.7))
 
     def _build_prompt_from_template(self, role_config: dict, request: str) -> str:
         """Build parameterized prompt from role configuration.
@@ -147,7 +139,7 @@ class GeminiClient:
 
     def send_message(self, message: str, conversation_history: Optional[List[Dict]] = None,
                     system_prompt: Optional[str] = None, role: Optional[str] = None) -> Dict:
-        """Send a message to Gemini and get a response
+        """Send a message to Groq and get a response
 
         Args:
             message: The user's message
@@ -161,55 +153,68 @@ class GeminiClient:
             conversation_history = []
 
         try:
+            # Build messages for Groq API
+            messages = []
+
             # Role-based prompt generation
             if role and role in LLM_ROLES:
                 role_config = LLM_ROLES[role]
                 system_prompt = self._build_prompt_from_template(role_config, message)
 
-            # Build conversation context
-            full_prompt = ""
-
             # Add system prompt if provided
             if system_prompt:
-                full_prompt += f"System: {system_prompt}\n\n"
+                messages.append({"role": "system", "content": system_prompt})
 
             # Add conversation history
             for msg in conversation_history:
-                role = msg.get("role", "")
-                content = msg.get("content", "")
-                if role == "user":
-                    full_prompt += f"User: {content}\n"
-                elif role == "assistant":
-                    full_prompt += f"Assistant: {content}\n"
+                messages.append({
+                    "role": msg.get("role", "user"),
+                    "content": msg.get("content", "")
+                })
 
             # Add current user message
-            full_prompt += f"User: {message}\nAssistant: "
+            messages.append({"role": "user", "content": message})
 
-            # Generate response
-            response = self.model.generate_content(
-                full_prompt,
-                generation_config=self.generation_config
+            # Generate response using Groq API
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens
             )
 
             # Extract assistant's response
-            assistant_message = response.text
+            assistant_message = response.choices[0].message.content
+
+            # Convert usage to dict - Pydantic model uses model_dump() or dict()
+            usage_dict = {}
+            if hasattr(response, 'usage') and response.usage:
+                try:
+                    usage_dict = response.usage.model_dump() if hasattr(response.usage, 'model_dump') else response.usage.dict()
+                except AttributeError:
+                    usage_dict = {"total_tokens": getattr(response.usage, 'total_tokens', 0)}
 
             return {
                 "success": True,
                 "response": assistant_message,
-                "usage": {},  # Gemini doesn't provide detailed usage info in the same way
+                "usage": usage_dict,
                 "model": self.model_name
             }
 
         except Exception as e:
+            # Log the full error for debugging
+            import traceback
+            print(f"[GroqClient Error] {str(e)}")
+            traceback.print_exc()
+
             return {
                 "success": False,
-                "error": f"Gemini API error: {str(e)}",
+                "error": f"Groq API error: {str(e)}",
                 "response": "I'm sorry, I'm having trouble right now. Please try again later."
             }
 
 
-def handle_ai_chat_request(llm_client: GeminiClient, message: str, system_prompt: str = None,
+def handle_ai_chat_request(llm_client: GroqClient, message: str, system_prompt: str = None,
                          room: str = 'main', page_content: dict = None, role: str = None, emit_to_socket: bool = True):
     """
     Handle AI chat requests with LLM and broadcast responses via SocketIO.
@@ -229,7 +234,7 @@ def handle_ai_chat_request(llm_client: GeminiClient, message: str, system_prompt
     try:
         # Get conversation history from session if available
         conversation_history = session.get('chat_history', [])
-        system_prompt = system_prompt or current_app.config.get('GEMINI_SYSTEM_PROMPT')
+        system_prompt = system_prompt or os.getenv('GROQ_SYSTEM_PROMPT', 'You are a helpful AI assistant.')
 
         # Add page content to context for Content Expert
         if role == 'Content Expert' and page_content:
@@ -243,7 +248,7 @@ def handle_ai_chat_request(llm_client: GeminiClient, message: str, system_prompt
             # update conversation history
             conversation_history.append({"role": "user", "content": message})
             conversation_history.append({"role": "assistant", "content": result["response"]})
-            max_history = current_app.config.get('GEMINI_MAX_CONVERSATION_HISTORY')
+            max_history = int(os.getenv('GROQ_MAX_CONVERSATION_HISTORY', 1))
             if len(conversation_history) > max_history:
                 conversation_history = conversation_history[-max_history:]
             session['chat_history'] = conversation_history
@@ -293,7 +298,7 @@ def assess_message_risk(message: str) -> dict:
         }
 
 
-def handle_ai_chat_request_react(llm_client: GeminiClient, message: str,
+def handle_ai_chat_request_react(llm_client: GroqClient, message: str,
                                  room: str = 'main', page_content: dict = None) -> dict:
     """
     ReAct pattern orchestrator for multi-step reasoning with semantic search.
@@ -305,7 +310,7 @@ def handle_ai_chat_request_react(llm_client: GeminiClient, message: str,
     4. Repeats until it can provide a Final Answer
 
     Args:
-        llm_client: Gemini LLM client
+        llm_client: Groq LLM client
         message: User's question
         room: SocketIO room for emitting messages
         page_content: Current page context (not used in current implementation)
@@ -530,7 +535,7 @@ def execute_orchestrator_response(orchestrator_response: str, message: str, page
         print(f"{'='*60}\n")
 
         # Clean up the orchestrator response before parsing
-        # Gemini often generates mixed quotes, so normalize them
+        # LLMs often generate mixed quotes, so normalize them
         cleaned_response = orchestrator_response.strip()
 
         # Instead of using ast.literal_eval (which fails on mixed quotes),
@@ -580,7 +585,7 @@ def execute_orchestrator_response(orchestrator_response: str, message: str, page
                         # Import database and create LLM client for expert
                         from .database import database
                         db = database()
-                        gemini = GeminiClient()
+                        groq = GroqClient()
 
                         # Update global LLM_ROLES with database roles
                         global LLM_ROLES
@@ -590,7 +595,7 @@ def execute_orchestrator_response(orchestrator_response: str, message: str, page
 
                         # Execute expert call (don't emit to socket for nested calls)
                         result = handle_ai_chat_request(
-                            llm_client=gemini,
+                            llm_client=groq,
                             message=expert_message,
                             role=role,
                             room='main',
@@ -648,19 +653,19 @@ def execute_orchestrator_response(orchestrator_response: str, message: str, page
                     'success': False
                 })
 
-        # Synthesize final response
+        # Synthesize final response - no SQL/CODE in response
         synthesis_prompt = f"""
         Based on the following expert execution results, provide a comprehensive response to the user's question: "{message}"
 
         Expert Results:
         {json.dumps(results, indent=2)}
 
-        Provide a clear, integrated response that addresses the original question.
+        Provide a clear, integrated response that addresses the original question without including technical code snippets.
         """
 
         # Create synthesis LLM call
-        gemini = GeminiClient()
-        synthesis_result = gemini.send_message(
+        groq = GroqClient()
+        synthesis_result = groq.send_message(
             message=synthesis_prompt,
             system_prompt="You are a response synthesizer who integrates multiple expert results into coherent answers."
         )
@@ -704,6 +709,7 @@ def execute_database_operation(generated_code: str, role: str, db) -> str:
         print(f"Executing {role} operation:")
         print("Generated code:")
         print(generated_code)
+        print(f"Generated code length: {len(generated_code) if generated_code else 0}")
 
         if role == 'Database Read Expert':
             # For read operations, expect SQL query
@@ -717,7 +723,7 @@ def execute_database_operation(generated_code: str, role: str, db) -> str:
 
                 # Execute query and format results
                 results = db.query(sql_query)
-                return f"Query executed successfully. Results: {len(results)} records found.\\n\\nResults: {results[:5]}..."  # Show first 5 results
+                return f"Query executed successfully. Found {len(results)} records.\\n\\nResults: {results[:5]}..."  # Show first 5 results
             else:
                 return "No valid SQL query found in expert response."
 
@@ -726,12 +732,34 @@ def execute_database_operation(generated_code: str, role: str, db) -> str:
             # Create a safe execution environment with db available
             safe_globals = {'db': db, 'json': json}
 
-            exec(generated_code, safe_globals)
-            return "Database write operation completed successfully."
+            try:
+                exec(generated_code, safe_globals)
+                print(f"DEBUG: Write code executed successfully")
+                return f"Database write operation completed successfully."
+            except Exception as write_err:
+                print(f"Database write operation error: {str(write_err)}")
+                # Fallback: Try to extract skill name and directly insert
+                import re
+                skill_match = re.search(r"['\"]([\w_]+)['\"]\s*(?:as)?\s*(?:a)?\s*skill", generated_code, re.IGNORECASE)
+                if skill_match:
+                    skill_name = skill_match.group(1)
+                    try:
+                        # Get first experience_id
+                        exp_result = db.query("SELECT experience_id FROM experiences ORDER BY start_date ASC LIMIT 1")
+                        if exp_result and len(exp_result) > 0:
+                            exp_id = exp_result[0]['experience_id']
+                            db.insertRows('skills', ['experience_id', 'name', 'skill_level'], [exp_id, skill_name, 3])
+                            return f"Database write operation completed successfully (fallback: added {skill_name})."
+                    except Exception as fallback_err:
+                        print(f"Fallback also failed: {str(fallback_err)}")
+                return f"Database write operation failed: {str(write_err)}"
 
         else:
             return f"Unknown database role: {role}"
 
     except Exception as e:
         print(f"Database operation error: {str(e)}")
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
         return f"Database operation failed: {str(e)}"

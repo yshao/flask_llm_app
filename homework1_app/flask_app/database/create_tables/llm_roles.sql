@@ -9,6 +9,9 @@ CREATE TABLE llm_roles (
     specific_instructions TEXT,
     background_context TEXT,
     few_shot_examples TEXT,
+    description TEXT,
+    system_prompt TEXT,
+    instruction TEXT,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -27,7 +30,22 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-CREATE TRIGGER update_llm_roles_updated_at 
-    BEFORE UPDATE ON llm_roles 
-    FOR EACH ROW 
+CREATE TRIGGER update_llm_roles_updated_at
+    BEFORE UPDATE ON llm_roles
+    FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+-- Add comments for documentation
+COMMENT ON COLUMN llm_roles.description IS 'Detailed description of the expert role';
+COMMENT ON COLUMN llm_roles.system_prompt IS 'System prompt used by the LLM';
+COMMENT ON COLUMN llm_roles.instruction IS 'Instruction template for generating responses';
+
+-- Migration script for existing databases (run if table already exists)
+-- Uncomment and run this block if updating existing database:
+--
+-- ALTER TABLE llm_roles ADD COLUMN IF NOT EXISTS description TEXT;
+-- ALTER TABLE llm_roles ADD COLUMN IF NOT EXISTS system_prompt TEXT;
+-- ALTER TABLE llm_roles ADD COLUMN IF NOT EXISTS instruction TEXT;
+-- COMMENT ON COLUMN llm_roles.description IS 'Detailed description of the expert role';
+-- COMMENT ON COLUMN llm_roles.system_prompt IS 'System prompt used by the LLM';
+-- COMMENT ON COLUMN llm_roles.instruction IS 'Instruction template for generating responses';

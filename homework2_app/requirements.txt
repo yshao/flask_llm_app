@@ -2,8 +2,7 @@ flask
 gunicorn
 cryptography
 flask-socketio
-gevent>=23.0.0
-gevent-websocket
+uvicorn[standard]>=0.30.0
 dnspython>=2.0.0
 google-generativeai
 groq
@@ -13,3 +12,4 @@ python-dotenv
 beautifulsoup4
 Flask-Failsafe
 pgvector
+aiohttp

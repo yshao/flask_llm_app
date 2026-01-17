@@ -24,11 +24,24 @@ ENV FLASK_APP=app
 ENV PORT=8080
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PIP_NO_CACHE_DIR=1
 
-# Health check for AWS ECS
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+# Health check (works with Railway, AWS ECS, etc.)
+# Uses PORT environment variable, defaults to 8080
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Run with Gunicorn and Gevent for production with WebSocket support
-# Added --timeout 120 for long LLM API requests
-CMD ["gunicorn", "--worker-class", "gevent.pygevent.GeventWorker", "--workers", "1", "--worker-connections", "1000", "--bind", "0.0.0.0:8080", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+# --timeout 120 for long LLM API requests
+# Uses PORT environment variable (Railway injects this automatically)
+CMD sh -c "gunicorn \
+    --worker-class gevent.pygevent.GeventWorker \
+    --workers 1 \
+    --worker-connections 1000 \
+    --bind 0.0.0.0:${PORT:-8080} \
+    --timeout 120 \
+    --access-logfile - \
+    --error-logfile - \
+    --worker-tmp-dir /dev/shm \
+    app:app"

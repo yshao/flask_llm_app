@@ -3,7 +3,7 @@
 from flask import current_app as app
 from flask import render_template, redirect, request, session, url_for, jsonify, send_from_directory
 from .utils.database import database
-from .utils.llm import GeminiClient
+from .utils.llm import GroqClient
 from .utils.llm import handle_ai_chat_request
 from .utils.llm import handle_ai_chat_request_react
 from .utils.llm import execute_orchestrator_response
@@ -66,7 +66,7 @@ def chat_with_ai():
 
             # Execute the pending action
             if USE_REACT:
-                return jsonify(handle_ai_chat_request_react(GeminiClient(), pending['message'], 'main', page_content))
+                return jsonify(handle_ai_chat_request_react(GroqClient(), pending['message'], 'main', page_content))
             else:
                 return process_orchestrator_request(pending['message'], page_content)
 
@@ -105,7 +105,7 @@ def process_orchestrator_request(message, page_content):
         JSON response
     """
     # Create LLM client and pass it to the handler
-    gemini = GeminiClient()
+    groq = GroqClient()
 
     # Create a dynamic system prompt that leverages page content when relevant
     if page_content and page_content.get('content'):
@@ -138,12 +138,12 @@ def process_orchestrator_request(message, page_content):
     # Use ReAct orchestrator if enabled, otherwise use original orchestrator
     if USE_REACT:
         print("Using ReAct orchestrator")
-        result = handle_ai_chat_request_react(gemini, message, 'main', page_content)
+        result = handle_ai_chat_request_react(groq, message, 'main', page_content)
         return jsonify(result)
     else:
         print("Using original orchestrator")
         # Use orchestrator by default for multi-expert coordination (don't emit raw plan to socket)
-        orchestrator_response = handle_ai_chat_request(llm_client=gemini, message=message, system_prompt=system_prompt, room='main', page_content=page_content, role="Orchestrator", emit_to_socket=False)
+        orchestrator_response = handle_ai_chat_request(llm_client=groq, message=message, system_prompt=system_prompt, room='main', page_content=page_content, role="Orchestrator", emit_to_socket=False)
 
         # Get the orchestrator's response
         response_data = orchestrator_response.get_json() if hasattr(orchestrator_response, 'get_json') else orchestrator_response
@@ -273,7 +273,7 @@ def a2a_handler():
             page_context = a2a_message.params.get('page_context', {})
 
             # Create LLM client
-            gemini = GeminiClient()
+            groq = GroqClient()
 
             # Build system prompt
             if page_context and page_context.get('content'):
