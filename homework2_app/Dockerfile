@@ -18,7 +18,8 @@ RUN apt-get update && apt-get install -y \
 # Upgrade pip to latest version
 RUN pip install --upgrade pip
 
-# Install Python dependencies with build isolation disabled for problematic packages
+# Install Python dependencies - cache busting with comment
+# Updated 2025-01-18: Fixed gevent package name
 COPY requirements.txt .
 RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt || \
     pip install --no-cache-dir -r requirements.txt
@@ -45,8 +46,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Run with Gunicorn and Gevent for production with WebSocket support
 # --timeout 120 for long LLM API requests
 # Uses PORT environment variable (Railway injects this automatically)
+# Updated 2025-01-18: Using standard gevent worker
 CMD sh -c "gunicorn \
-    --worker-class gevent.pygevent.GeventWorker \
+    --worker-class gevent \
     --workers 1 \
     --worker-connections 1000 \
     --bind 0.0.0.0:${PORT:-8080} \
