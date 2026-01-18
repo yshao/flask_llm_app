@@ -9,9 +9,13 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Upgrade pip to latest version
+RUN pip install --upgrade pip
+
+# Install Python dependencies with build isolation disabled for problematic packages
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt || \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
