@@ -2,11 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies (add curl and postgresql-client for AWS deployment)
+# Install system dependencies including PostgreSQL dev headers for pgvector
 RUN apt-get update && apt-get install -y \
     gcc \
+    g++ \
     curl \
     postgresql-client \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip to latest version
