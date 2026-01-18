@@ -2,9 +2,7 @@
 # RAILWAY DEPLOYMENT CONFIGURATION
 # ============================================================================
 
-[project]
-# Build configuration
-[project.build]
+[build]
 builder = "DOCKERFILE"
 dockerfilePath = "homework2_app/Dockerfile"
 context = "homework2_app"
