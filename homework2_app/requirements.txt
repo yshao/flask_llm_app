@@ -1,7 +1,6 @@
 flask
 gunicorn
-gevent
-gevent.pygevent
+gevent[pygevent]
 cryptography
 flask-socketio
 uvicorn[standard]>=0.30.0
