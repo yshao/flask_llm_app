@@ -1,0 +1,24 @@
+# ============================================================================
+# RAILWAY DEPLOYMENT CONFIGURATION
+# ============================================================================
+# Place this file at the REPOSITORY ROOT when the app is in a subdirectory
+# ============================================================================
+
+[build]
+builder = "DOCKERFILE"
+# Path to Dockerfile relative to repository root
+dockerfilePath = "homework2_app/Dockerfile"
+# Build context - where COPY commands look for files
+context = "homework2_app"
+
+[service]
+name = "flask-llm-app"
+
+[service.health_check]
+http_path = "/health"
+http_method = "GET"
+status_codes = [200, 302]
+interval = "30s"
+timeout = "10s"
+grace_period = "60s"
+failure_threshold = 3
