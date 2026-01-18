@@ -2,13 +2,17 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies including PostgreSQL dev headers for pgvector
+# Install system dependencies including build essentials
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     curl \
     postgresql-client \
     libpq-dev \
+    libssl-dev \
+    libffi-dev \
+    libev-dev \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip to latest version
