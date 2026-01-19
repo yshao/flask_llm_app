@@ -1,0 +1,58 @@
+# ============================================================================
+# Dockerfile.llm - PostgreSQL with pgvector Extension
+# ============================================================================
+# Standalone PostgreSQL 16 with pgvector extension for vector embeddings.
+#
+# Build: docker build -f Dockerfile.llm -t pgvector-llm .
+# Run:   docker run -p 5432:5432 pgvector-llm
+#
+# Environment Variables:
+#   POSTGRES_DB         - Database name (default: homework_db)
+#   POSTGRES_USER       - Database user (default: postgres)
+#   POSTGRES_PASSWORD   - Database password (default: changeme)
+# ============================================================================
+
+FROM pgvector/pgvector:pg16
+
+# ----------------------------------------------------------------------------
+# Metadata
+# ----------------------------------------------------------------------------
+LABEL maintainer="Prof. MM Ghassemi <ghassem3@msu.edu>"
+LABEL description="PostgreSQL 16 with pgvector extension for vector embeddings"
+
+# ----------------------------------------------------------------------------
+# Environment variables (with defaults)
+# ----------------------------------------------------------------------------
+ENV POSTGRES_DB=homework_db \
+    POSTGRES_USER=postgres \
+    POSTGRES_PASSWORD=changeme
+
+# ----------------------------------------------------------------------------
+# Copy initialization script
+# ----------------------------------------------------------------------------
+# This script will:
+# 1. Create the database if it doesn't exist
+# 2. Enable the pgvector extension
+COPY init-pgvector.sh /docker-entrypoint-initdb.d/init-pgvector.sh
+RUN chmod +x /docker-entrypoint-initdb.d/init-pgvector.sh
+
+# ----------------------------------------------------------------------------
+# Expose PostgreSQL port
+# ----------------------------------------------------------------------------
+EXPOSE 5432
+
+# ----------------------------------------------------------------------------
+# Volume for data persistence
+# ----------------------------------------------------------------------------
+VOLUME ["/var/lib/postgresql/data"]
+
+# ----------------------------------------------------------------------------
+# Health check
+# ----------------------------------------------------------------------------
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} || exit 1
+
+# ----------------------------------------------------------------------------
+# Use default PostgreSQL entrypoint
+# ----------------------------------------------------------------------------
+# The base image handles starting PostgreSQL automatically
