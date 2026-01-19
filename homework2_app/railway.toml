@@ -8,12 +8,16 @@
 # -----------------------------------------------------------------------------
 # Project Configuration
 # -----------------------------------------------------------------------------
-
 [project]
-# Build configuration from Dockerfile
+# Project name (optional, defaults to repo name)
+name = "flask-llm-app"
+
+# -----------------------------------------------------------------------------
+# Build Configuration
+# -----------------------------------------------------------------------------
 [build]
 builder = "DOCKERFILE"
-# Use the main Dockerfile for Flask application
+# Path to Dockerfile relative to project root
 dockerfilePath = "Dockerfile"
 # Build context - where COPY commands look for files
 context = "."
@@ -21,60 +25,78 @@ context = "."
 # -----------------------------------------------------------------------------
 # Service Configuration (Flask Web Application)
 # -----------------------------------------------------------------------------
-
 [service]
-# Railway automatically assigns a PORT and injects it as environment variable
-# The app should read from the PORT environment variable
 name = "flask-llm-app"
 # Required for Railway deployment
 restart_policy_type = "ON_FAILURE"
 restart_policy_max_retries = 10
 
-# Health check configuration
+# Resource allocation (optional, Railway has defaults)
+# [service.resources]
+# memory = "512Mi"
+# cpu = "0.5"
+
+# -----------------------------------------------------------------------------
+# Health Check Configuration
+# -----------------------------------------------------------------------------
 [service.health_check]
-# HTTP health check endpoint
 http_path = "/health"
 http_method = "GET"
-# Expected response status codes (200-299 are healthy)
 status_codes = [200, 302]
-# Check interval
 interval = "30s"
-# Timeout for each check
 timeout = "10s"
-# Grace period before starting health checks
 grace_period = "60s"
-# Number of consecutive failures before marking unhealthy
 failure_threshold = 3
 
 # -----------------------------------------------------------------------------
-# Environment Variables (Set in Railway Dashboard, not here)
+# Environment Variables Reference
 # -----------------------------------------------------------------------------
-# Required environment variables (configure in Railway UI):
+# Configure these in Railway Dashboard (Variables tab) or using Railway CLI:
 #
-# Google Gemini API:
-#   GEMINI_API_KEY=your_key_here
-#   GEMINI_MODEL=gemini-2.5-flash
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │ REQUIRED API KEYS                                                        │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │ GEMINI_API_KEY=your_gemini_api_key_here                                │
+# │   Get from: https://makersuite.google.com/app/apikey                   │
+# │                                                                         │
+# │ GROQ_API_KEY=your_groq_api_key_here                                    │
+# │   Get from: https://console.groq.com/keys                              │
+# └─────────────────────────────────────────────────────────────────────────┘
 #
-# Groq API (for chatbot):
-#   GROQ_API_KEY=your_key_here
-#   GROQ_MODEL=llama-3.3-70b-versatile
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │ DATABASE (Add PostgreSQL Plugin in Railway)                             │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │ 1. Click "New Service" → "Database" → "Add PostgreSQL"                 │
+# │ 2. PostgreSQL with pgvector support is included                        │
+# │ 3. Use Railway's variable ref syntax:                                  │
+# │                                                                         │
+# │ DATABASE_HOST=${{Postgres.HOSTNAME}}                                   │
+# │ DATABASE_NAME=${{Postgres.DATABASE}}                                   │
+# │ DATABASE_USER=${{Postgres.USERNAME}}                                   │
+# │ DATABASE_PASSWORD=${{Postgres.PASSWORD}}                               │
+# │ DATABASE_PORT=${{Postgres.PORT}}                                       │
+# └─────────────────────────────────────────────────────────────────────────┘
 #
-# Database (Add PostgreSQL service in Railway - supports pgvector):
-#   DATABASE_HOST=${{Postgres.HOSTNAME}}
-#   DATABASE_NAME=${{Postgres.DATABASE}}
-#   DATABASE_USER=${{Postgres.USERNAME}}
-#   DATABASE_PASSWORD=${{Postgres.PASSWORD}}
-#   DATABASE_PORT=${{Postgres.PORT}}
-#
-# Flask Configuration:
-#   FLASK_ENV=production
-#   SECRET_KEY=your_secret_key_here
-#
-# Encryption:
-#   ENCRYPTION_ONEWAY_SALT=your_random_salt
-#   ENCRYPTION_REVERSIBLE_KEY=your_encryption_key
-#
-# Rate Limiting:
-#   RATE_LIMIT_QUOTA=1000
-#   RATE_LIMIT_INTERVAL=1
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │ OPTIONAL CONFIGURATION                                                  │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │ FLASK_ENV=production                                                   │
+# │ SECRET_KEY=your_random_secret_key                                      │
+# │                                                                         │
+# │ ENCRYPTION_ONEWAY_SALT=your_random_salt                                │
+# │ ENCRYPTION_REVERSIBLE_KEY=your_encryption_key                          │
+# │                                                                         │
+# │ RATE_LIMIT_QUOTA=1000                                                  │
+# │ RATE_LIMIT_INTERVAL=1                                                 │
+# └─────────────────────────────────────────────────────────────────────────┘
+
+# -----------------------------------------------------------------------------
+# Deployment Notes
+# -----------------------------------------------------------------------------
+# 1. Railway automatically detects this file on git push
+# 2. Builds using Dockerfile in the same directory
+# 3. Deploys to a public URL with HTTPS
+# 4. Auto-deploys on new commits to main branch
+# 5. Health checks determine service status
+# 6. Logs available in Railway dashboard
 # -----------------------------------------------------------------------------
