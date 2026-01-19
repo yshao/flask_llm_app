@@ -13,10 +13,10 @@ SHELL := /bin/bash
 
 PROJECT_DIR := $(shell pwd)
 ENV_FILE := $(PROJECT_DIR)/.env
-COMPOSE_FILE := $(PROJECT_DIR)/docker-compose-local.yml
+COMPOSE_FILE := $(PROJECT_DIR)/docker compose-local.yml
 COMPOSE_PROJECT := flask_llm_app
 
-# Container names (from docker-compose-local.yml)
+# Container names (from docker compose-local.yml)
 POSTGRES_CONTAINER := flask_llm_postgres
 
 # Flask configuration (from .env)
@@ -102,7 +102,7 @@ start: deploy
 
 db-up:
 	@echo "$(COLOR_CYAN)▶ [1/2]$(COLOR_RESET) Starting postgres container"
-	@docker-compose -f $(COMPOSE_FILE) up -d postgres
+	@docker compose -f $(COMPOSE_FILE) up -d postgres
 	@echo "$(COLOR_GREEN)✓ Container starting$(COLOR_RESET)"
 	@echo "$(COLOR_CYAN)▶ [2/2]$(COLOR_RESET) Waiting for database ready"
 	@$(MAKE) --no-print-directory db-ready
@@ -110,7 +110,7 @@ db-up:
 
 db-down:
 	@echo "$(COLOR_CYAN)▶ [1/1]$(COLOR_RESET) Stopping containers"
-	@docker-compose -f $(COMPOSE_FILE) down
+	@docker compose -f $(COMPOSE_FILE) down
 	@echo "$(COLOR_GREEN)✓ Containers stopped$(COLOR_RESET)"
 
 db-test:
@@ -150,7 +150,7 @@ db-init:
 		if docker exec $(POSTGRES_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME) -c "SELECT 1 FROM pg_extension WHERE extname='vector'" > /dev/null 2>&1; then \
 			echo "$(COLOR_YELLOW)⚠ WARNING: Database already initialized (pgvector exists)$(COLOR_RESET)"; \
 		else \
-			docker-compose -f $(COMPOSE_FILE) run --rm db-init; \
+			docker compose -f $(COMPOSE_FILE) run --rm db-init; \
 			echo "$(COLOR_GREEN)✓ Database initialized$(COLOR_RESET)"; \
 		fi \
 	else \
@@ -297,6 +297,6 @@ clean:
 	@echo "$(COLOR_CYAN)▶ [1/2]$(COLOR_RESET) Stopping services"
 	@$(MAKE) --no-print-directory stop > /dev/null 2>&1 || true
 	@echo "$(COLOR_CYAN)▶ [2/2]$(COLOR_RESET) Removing containers and volumes"
-	@docker-compose -f $(COMPOSE_FILE) down -v
+	@docker compose -f $(COMPOSE_FILE) down -v
 	@rm -f $(APP_PID_FILE)
 	@echo "$(COLOR_GREEN)✓ Cleanup complete$(COLOR_RESET)"
