@@ -6,6 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
+    make \
     curl \
     postgresql-client \
     libpq-dev \
@@ -16,13 +17,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip to latest version
-RUN pip install --upgrade pip
+# Use --break-system-packages for containerized deployment (PEP 668)
+RUN pip install --break-system-packages --upgrade pip
 
 # Install Python dependencies - cache busting with comment
 # Updated 2025-01-18: Fixed gevent package name
+# Use --break-system-packages for containerized deployment (PEP 668)
 COPY requirements.txt .
-RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt || \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --break-system-packages --no-cache-dir --no-build-isolation -r requirements.txt || \
+    pip install --break-system-packages --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .

@@ -1,15 +1,18 @@
 # ============================================================================
-# Dockerfile.llm - PostgreSQL with pgvector Extension
+# Dockerfile.llm - PostgreSQL with pgvector for Railway
 # ============================================================================
 # Standalone PostgreSQL 16 with pgvector extension for vector embeddings.
+# Optimized for Railway deployment.
 #
 # Build: docker build -f Dockerfile.llm -t pgvector-llm .
 # Run:   docker run -p 5432:5432 pgvector-llm
 #
-# Environment Variables:
-#   POSTGRES_DB         - Database name (default: homework_db)
-#   POSTGRES_USER       - Database user (default: postgres)
-#   POSTGRES_PASSWORD   - Database password (default: changeme)
+# Railway Deployment:
+#   1. Create new service in Railway
+#   2. Select "Dockerfile" as build type
+#   3. Set dockerfilePath to "homework2_app/Dockerfile.llm"
+#   4. Add environment variables:
+#      POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
 # ============================================================================
 
 FROM pgvector/pgvector:pg16
@@ -30,11 +33,10 @@ ENV POSTGRES_DB=homework_db \
 # ----------------------------------------------------------------------------
 # Copy initialization script
 # ----------------------------------------------------------------------------
-# This script will:
-# 1. Create the database if it doesn't exist
-# 2. Enable the pgvector extension
-COPY init-pgvector.sh /docker-entrypoint-initdb.d/init-pgvector.sh
-RUN chmod +x /docker-entrypoint-initdb.d/init-pgvector.sh
+# This script will automatically enable the pgvector extension
+# on first container start
+COPY init-pgvector.sh /docker-entrypoint-initdb.d/10-init-pgvector.sh
+RUN chmod +x /docker-entrypoint-initdb.d/10-init-pgvector.sh
 
 # ----------------------------------------------------------------------------
 # Expose PostgreSQL port
@@ -49,10 +51,12 @@ VOLUME ["/var/lib/postgresql/data"]
 # ----------------------------------------------------------------------------
 # Health check
 # ----------------------------------------------------------------------------
+# Railway uses health checks to determine service status
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} || exit 1
 
 # ----------------------------------------------------------------------------
-# Use default PostgreSQL entrypoint
+# Use default PostgreSQL entrypoint from base image
 # ----------------------------------------------------------------------------
-# The base image handles starting PostgreSQL automatically
+# The pgvector/pgvector:pg16 base image includes proper entrypoint
+# that handles database initialization automatically

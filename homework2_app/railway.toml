@@ -13,20 +13,22 @@
 # Build configuration from Dockerfile
 [build]
 builder = "DOCKERFILE"
-# Path to Dockerfile relative to project root (homework2_app directory)
-dockerfilePath = "homework2_app/Dockerfile"
+# Use the main Dockerfile for Flask application
+dockerfilePath = "Dockerfile"
 # Build context - where COPY commands look for files
-# Set to "homework2_app" so requirements.txt and other files are found
-context = "homework2_app"
+context = "."
 
 # -----------------------------------------------------------------------------
-# Service Configuration
+# Service Configuration (Flask Web Application)
 # -----------------------------------------------------------------------------
 
 [service]
 # Railway automatically assigns a PORT and injects it as environment variable
 # The app should read from the PORT environment variable
 name = "flask-llm-app"
+# Required for Railway deployment
+restart_policy_type = "ON_FAILURE"
+restart_policy_max_retries = 10
 
 # Health check configuration
 [service.health_check]
@@ -57,7 +59,7 @@ failure_threshold = 3
 #   GROQ_API_KEY=your_key_here
 #   GROQ_MODEL=llama-3.3-70b-versatile
 #
-# Database (add PostgreSQL service in Railway):
+# Database (Add PostgreSQL service in Railway - supports pgvector):
 #   DATABASE_HOST=${{Postgres.HOSTNAME}}
 #   DATABASE_NAME=${{Postgres.DATABASE}}
 #   DATABASE_USER=${{Postgres.USERNAME}}
@@ -71,4 +73,8 @@ failure_threshold = 3
 # Encryption:
 #   ENCRYPTION_ONEWAY_SALT=your_random_salt
 #   ENCRYPTION_REVERSIBLE_KEY=your_encryption_key
+#
+# Rate Limiting:
+#   RATE_LIMIT_QUOTA=1000
+#   RATE_LIMIT_INTERVAL=1
 # -----------------------------------------------------------------------------
