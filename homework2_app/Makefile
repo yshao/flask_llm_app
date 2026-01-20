@@ -13,10 +13,10 @@ SHELL := /bin/bash
 
 PROJECT_DIR := $(shell pwd)
 ENV_FILE := $(PROJECT_DIR)/.env
-COMPOSE_FILE := $(PROJECT_DIR)/docker compose-local.yml
+COMPOSE_FILE := $(PROJECT_DIR)/docker-compose-local.yml
 COMPOSE_PROJECT := flask_llm_app
 
-# Container names (from docker compose-local.yml)
+# Container names (from docker-compose-local.yml)
 POSTGRES_CONTAINER := flask_llm_postgres
 
 # Flask configuration (from .env)
